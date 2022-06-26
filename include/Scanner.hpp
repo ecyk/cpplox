@@ -1,0 +1,40 @@
+#pragma once
+
+#include <unordered_map>
+#include <vector>
+
+#include "Token.hpp"
+
+namespace lox::treewalk {
+class Scanner {
+ public:
+  explicit Scanner(std::string source);
+
+  std::vector<Token> scan_tokens();
+
+ private:
+  void scan_token();
+  void add_token(TokenType type);
+  void add_token(TokenType type, const std::any &literal);
+
+  void comment();
+  void multiline_comment();
+  void string();
+  void number();
+  void identifier();
+
+  [[nodiscard]] char peek() const;
+  [[nodiscard]] char peek_next() const;
+  bool match(char expected);
+  char advance();
+
+  [[nodiscard]] bool is_at_end() const;
+
+ private:  // NOLINT
+  std::string source_;
+
+  std::vector<Token> tokens_;
+  size_t start_ = 0, current_ = 0;
+  size_t line_ = 1;
+};
+}  // namespace lox::treewalk
