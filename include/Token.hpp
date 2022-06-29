@@ -1,6 +1,5 @@
 #pragma once
 
-#include <any>
 #include <string>
 
 namespace lox::treewalk {
@@ -61,15 +60,16 @@ enum class TokenType {
 class Token {
  public:
   Token(TokenType token_type, std::string lexeme, size_t line);
-  Token(TokenType token_type, std::string lexeme, std::any literal,
-        size_t line);
+
+  TokenType get_token_type() const { return token_type_; }
+  std::string get_lexeme() const { return lexeme_; }
+  size_t get_line() const { return line_; }
 
   std::string to_string();
 
  private:
   TokenType token_type_;
   std::string lexeme_;
-  std::any literal_;
   size_t line_;
 };
 }  // namespace lox::treewalk

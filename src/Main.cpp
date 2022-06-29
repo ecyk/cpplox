@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {  // NOLINT
       treewalk::run_prompt();
     }
     return EXIT_SUCCESS;
-  } catch (const LoxError& e) {
+  } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
   }
 

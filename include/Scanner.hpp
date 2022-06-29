@@ -15,7 +15,6 @@ class Scanner {
  private:
   void scan_token();
   void add_token(TokenType type);
-  void add_token(TokenType type, const std::any &literal);
 
   void comment();
   void multiline_comment();

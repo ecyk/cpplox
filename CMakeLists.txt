@@ -1,8 +1,9 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(cpplox)
+project(cpplox LANGUAGES CXX)
 
 set(SOURCES
+    src/AstPrinter.cpp
     src/Main.cpp
     src/Error.cpp
     src/Lox.cpp

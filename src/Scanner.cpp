@@ -108,11 +108,6 @@ void Scanner::add_token(TokenType type) {
   tokens_.emplace_back(type, source_.substr(start_, current_ - start_), line_);
 }
 
-void Scanner::add_token(TokenType type, const std::any& literal) {
-  tokens_.emplace_back(type, source_.substr(start_, current_ - start_), literal,
-                       line_);
-}
-
 void Scanner::comment() {
   // A comment goes until the end of the line
   while (peek() != '\n' && !is_at_end()) {
@@ -159,9 +154,7 @@ void Scanner::string() {
   // The closing "
   advance();
 
-  // Trim the surrounding quotes and add token
-  const std::string& value = source_.substr(start_ + 1, current_ - start_ - 2);
-  add_token(TokenType::STRING, value);
+  add_token(TokenType::STRING);
 }
 
 void Scanner::number() {
@@ -179,9 +172,7 @@ void Scanner::number() {
     }
   }
 
-  double value =
-      std::strtod(source_.substr(start_, current_ - start_).c_str(), nullptr);
-  add_token(TokenType::NUMBER, value);
+  add_token(TokenType::NUMBER);
 }
 
 void Scanner::identifier() {
