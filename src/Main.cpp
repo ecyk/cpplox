@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {  // NOLINT
       std::cerr << "Usage: cpplox [script]";
       return EXIT_FAILURE;
     } else if (argc == 2) {
-      treewalk::run_file(argv[1]);  // NOLINT
+      treewalk::run_file(argv[1]);
     } else {
       treewalk::run_prompt();
     }

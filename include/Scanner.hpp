@@ -29,7 +29,7 @@ class Scanner {
 
   [[nodiscard]] bool is_at_end() const;
 
- private:  // NOLINT
+ private:
   std::string source_;
 
   std::vector<Token> tokens_;

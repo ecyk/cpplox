@@ -26,7 +26,7 @@ std::vector<Token> Scanner::scan_tokens() {
 }
 
 void Scanner::scan_token() {
-  char c = advance();  // NOLINT
+  char c = advance();
   switch (c) {
     case '(':
       add_token(TokenType::LEFT_PAREN);
@@ -180,8 +180,7 @@ void Scanner::identifier() {
     advance();
   }
 
-  if (auto it =  // NOLINT
-      keywords_.find(source_.substr(start_, current_ - start_));
+  if (auto it = keywords_.find(source_.substr(start_, current_ - start_));
       it != keywords_.end()) {
     add_token(it->second);
     return;
