@@ -1,6 +1,5 @@
 #include <iostream>
 
-#include "Error.hpp"
 #include "Lox.hpp"
 
 using namespace lox;
@@ -15,6 +14,11 @@ int main(int argc, char* argv[]) {  // NOLINT
     } else {
       treewalk::run_prompt();
     }
+
+    if (treewalk::s_had_error) {
+      return EXIT_FAILURE;
+    }
+
     return EXIT_SUCCESS;
   } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "Expr.hpp"
 
 namespace lox::treewalk {

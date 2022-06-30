@@ -5,7 +5,6 @@ project(cpplox LANGUAGES CXX)
 set(SOURCES
     src/AstPrinter.cpp
     src/Main.cpp
-    src/Error.cpp
     src/Lox.cpp
     src/Token.cpp
     src/Scanner.cpp

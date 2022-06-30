@@ -1,8 +1,6 @@
 #include "Scanner.hpp"
 
-#include <utility>
-
-#include "Error.hpp"
+#include "Lox.hpp"
 
 namespace lox::treewalk {
 static const std::unordered_map<std::string, TokenType> keywords_ = {  // NOLINT
@@ -98,7 +96,7 @@ void Scanner::scan_token() {
       } else if ((std::isalpha(c) != 0) || c == '_') {
         identifier();
       } else {
-        throw LoxError(line_, "Unexpected character.");
+        error(line_, "Unexpected character.");
       }
       break;
   }
@@ -127,7 +125,8 @@ void Scanner::multiline_comment() {
   }
 
   if (is_at_end()) {
-    throw LoxError(start_line, "Unterminated multiline comment.");
+    error(start_line, "Unterminated multiline comment.");
+    return;
   }
 
   // Consume the "*"
@@ -148,7 +147,8 @@ void Scanner::string() {
   }
 
   if (is_at_end()) {
-    throw LoxError(start_line, "Unterminated string.");
+    error(start_line, "Unterminated string.");
+    return;
   }
 
   // The closing "

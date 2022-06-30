@@ -1,3 +1,5 @@
+#pragma once
+
 #include <memory>
 #include <variant>
 
@@ -51,10 +53,12 @@ class Grouping : public Expr {
 
 class Literal : public Expr {
  public:
-  using LiteralVariant = std::variant<std::string, double>;
+  using LiteralVariant = std::variant<const void*, std::string, double, bool>;
 
+  Literal() : value_{nullptr} {}
   explicit Literal(std::string value) : value_{std::move(value)} {}
   explicit Literal(double value) : value_{value} {}
+  explicit Literal(bool value) : value_{value} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
