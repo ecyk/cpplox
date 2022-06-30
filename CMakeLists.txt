@@ -8,6 +8,7 @@ set(SOURCES
     src/Lox.cpp
     src/Token.cpp
     src/Scanner.cpp
+    src/Parser.cpp
 )
 
 add_executable(cpplox ${SOURCES})

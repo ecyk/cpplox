@@ -53,12 +53,17 @@ class Grouping : public Expr {
 
 class Literal : public Expr {
  public:
-  using LiteralVariant = std::variant<const void*, std::string, double, bool>;
+  using Nil = const void*;
+  using String = std::string;
+  using Number = double;
+  using Bool = bool;
+
+  using LiteralVariant = std::variant<Nil, String, Number, Bool>;
 
   Literal() : value_{nullptr} {}
-  explicit Literal(std::string value) : value_{std::move(value)} {}
-  explicit Literal(double value) : value_{value} {}
-  explicit Literal(bool value) : value_{value} {}
+  explicit Literal(String value) : value_{std::move(value)} {}
+  explicit Literal(Number value) : value_{value} {}
+  explicit Literal(Bool value) : value_{value} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 

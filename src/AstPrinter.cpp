@@ -23,10 +23,18 @@ void AstPrinter::visit(const expr::Grouping& grouping) {
 }
 
 void AstPrinter::visit(const expr::Literal& literal) {
-  if (std::holds_alternative<std::string>(literal.value_)) {
-    str_ += std::get<std::string>(literal.value_);
-  } else if (std::holds_alternative<double>(literal.value_)) {
-    str_ += std::to_string(std::get<double>(literal.value_));
+  if (std::holds_alternative<expr::Literal::Nil>(literal.value_)) {
+    str_ += "nil";
+  } else if (std::holds_alternative<expr::Literal::String>(literal.value_)) {
+    str_ += std::get<expr::Literal::String>(literal.value_);
+  } else if (std::holds_alternative<expr::Literal::Number>(literal.value_)) {
+    str_ += std::to_string(std::get<expr::Literal::Number>(literal.value_));
+  } else if (std::holds_alternative<expr::Literal::Bool>(literal.value_)) {
+    if (std::get<expr::Literal::Bool>(literal.value_)) {
+      str_ += "true";
+    } else {
+      str_ += "false";
+    }
   }
 }
 

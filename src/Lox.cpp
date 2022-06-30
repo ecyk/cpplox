@@ -3,6 +3,8 @@
 #include <fstream>
 #include <iostream>
 
+#include "AstPrinter.hpp"
+#include "Parser.hpp"
 #include "Scanner.hpp"
 
 namespace lox::treewalk {
@@ -13,6 +15,16 @@ static void run(const std::string& source) {
   for (auto& token : tokens) {
     std::cout << token.to_string() << '\n';
   }
+
+  Parser parser{tokens};
+  auto expr = parser.parse();
+
+  if (s_had_error) {
+    return;
+  }
+
+  AstPrinter ast_printer;
+  std::cout << ast_printer.print(expr) << '\n';
 }
 
 void run_file(const std::string& path) {
@@ -36,6 +48,14 @@ void run_prompt() {
 
     run(source_line);
     s_had_error = false;
+  }
+}
+
+void error(const Token& token, const std::string& message) {
+  if (token.get_token_type() == TokenType::EOF_) {
+    report(token.get_line(), " at end", message);
+  } else {
+    report(token.get_line(), " at '" + token.get_lexeme() + "'", message);
   }
 }
 
