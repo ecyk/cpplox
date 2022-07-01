@@ -62,7 +62,7 @@ void runtime_error(const RuntimeError& error) {
 }
 
 void error(const Token& token, const std::string& message) {
-  if (token.get_token_type() == TokenType::EOF_) {
+  if (token.get_type() == TokenType::EOF_) {
     report(token.get_line(), " at end", message);
   } else {
     report(token.get_line(), " at '" + token.get_lexeme() + "'", message);

@@ -22,7 +22,7 @@ void Interpreter::visit(expr::Binary& binary) {
   evaluate(*binary.right_);
   auto right = std::move(value_);
 
-  switch (binary.op_.get_token_type()) {
+  switch (binary.op_.get_type()) {
     case TokenType::BANG_EQUAL:
       value_ = Object{left != right};
       break;
@@ -90,7 +90,7 @@ void Interpreter::visit(expr::Unary& unary) {
   evaluate(*unary.right_);
   auto right = std::move(value_);
 
-  switch (unary.op_.get_token_type()) {
+  switch (unary.op_.get_type()) {
     case TokenType::BANG:
       value_ = Object{!is_truthy(right)};
       break;

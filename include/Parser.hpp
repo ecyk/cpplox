@@ -16,18 +16,18 @@ class Parser {
   expr::Expr::Ptr parse();
 
  private:
-  void expression();
-  void equality();
-  void comparison();
-  void term();
-  void factor();
-  void unary();
-  void primary();
+  expr::Expr::Ptr expression();
+  expr::Expr::Ptr equality();
+  expr::Expr::Ptr comparison();
+  expr::Expr::Ptr term();
+  expr::Expr::Ptr factor();
+  expr::Expr::Ptr unary();
+  expr::Expr::Ptr primary();
 
   bool match(TokenType type);
   bool check(TokenType type);
   Token advance();
-  bool isAtEnd();
+  bool is_at_end();
   Token peek();
   Token previous();
 
@@ -40,7 +40,5 @@ class Parser {
  private:
   std::vector<Token> tokens_;
   size_t current_ = 0;
-
-  expr::Expr::Ptr expr_ptr_;
 };
 }  // namespace lox::treewalk
