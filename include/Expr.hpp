@@ -1,8 +1,8 @@
 #pragma once
 
 #include <memory>
-#include <variant>
 
+#include "Object.hpp"
 #include "Token.hpp"
 
 namespace lox::treewalk::expr {
@@ -15,10 +15,10 @@ class Visitor {
  public:
   virtual ~Visitor() = default;
 
-  virtual void visit(const Binary& binary) = 0;
-  virtual void visit(const Grouping& grouping) = 0;
-  virtual void visit(const Literal& literal) = 0;
-  virtual void visit(const Unary& unary) = 0;
+  virtual void visit(Binary& binary) = 0;
+  virtual void visit(Grouping& grouping) = 0;
+  virtual void visit(Literal& literal) = 0;
+  virtual void visit(Unary& unary) = 0;
 };
 
 class Expr {
@@ -53,21 +53,11 @@ class Grouping : public Expr {
 
 class Literal : public Expr {
  public:
-  using Nil = const void*;
-  using String = std::string;
-  using Number = double;
-  using Bool = bool;
-
-  using LiteralVariant = std::variant<Nil, String, Number, Bool>;
-
-  Literal() : value_{nullptr} {}
-  explicit Literal(String value) : value_{std::move(value)} {}
-  explicit Literal(Number value) : value_{value} {}
-  explicit Literal(Bool value) : value_{value} {}
+  explicit Literal(Object value) : value_{std::move(value)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  LiteralVariant value_;
+  Object value_;
 };
 
 class Unary : public Expr {

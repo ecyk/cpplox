@@ -83,21 +83,21 @@ void Parser::unary() {
 
 void Parser::primary() {
   if (match(TokenType::FALSE)) {
-    expr_ptr_ = std::make_unique<expr::Literal>(false);
+    expr_ptr_ = std::make_unique<expr::Literal>(Object{false});
     return;
   }
   if (match(TokenType::TRUE)) {
-    expr_ptr_ = std::make_unique<expr::Literal>(true);
+    expr_ptr_ = std::make_unique<expr::Literal>(Object{true});
     return;
   }
   if (match(TokenType::NIL)) {
-    expr_ptr_ = std::make_unique<expr::Literal>();
+    expr_ptr_ = std::make_unique<expr::Literal>(Object{});
     return;
   }
 
   if (match(TokenType::NUMBER)) {
     double value = std::strtod(previous().get_lexeme().c_str(), nullptr);
-    expr_ptr_ = std::make_unique<expr::Literal>(value);
+    expr_ptr_ = std::make_unique<expr::Literal>(Object{value});
     return;
   }
   if (match(TokenType::STRING)) {
@@ -106,7 +106,7 @@ void Parser::primary() {
     // Trim string
     value.pop_back();
     value.erase(value.begin());
-    expr_ptr_ = std::make_unique<expr::Literal>(value);
+    expr_ptr_ = std::make_unique<expr::Literal>(Object{value});
     return;
   }
 

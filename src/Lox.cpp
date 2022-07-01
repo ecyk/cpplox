@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "AstPrinter.hpp"
+#include "Interpreter.hpp"
 #include "Parser.hpp"
 #include "Scanner.hpp"
 
@@ -25,6 +26,9 @@ static void run(const std::string& source) {
 
   AstPrinter ast_printer;
   std::cout << ast_printer.print(expr) << '\n';
+
+  static Interpreter interpreter;
+  interpreter.interpret(expr);
 }
 
 void run_file(const std::string& path) {
@@ -49,6 +53,12 @@ void run_prompt() {
     run(source_line);
     s_had_error = false;
   }
+}
+
+void runtime_error(const RuntimeError& error) {
+  std::cout << std::string{error.what()} + "\n[line " +
+                   std::to_string(error.token_.get_line()) + "]\n";
+  s_had_runtime_error = true;
 }
 
 void error(const Token& token, const std::string& message) {

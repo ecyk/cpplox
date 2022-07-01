@@ -43,5 +43,4 @@ class Parser {
 
   expr::Expr::Ptr expr_ptr_;
 };
-
 }  // namespace lox::treewalk

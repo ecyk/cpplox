@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {  // NOLINT
       treewalk::run_prompt();
     }
 
-    if (treewalk::s_had_error) {
+    if (treewalk::s_had_error || treewalk::s_had_runtime_error) {
       return EXIT_FAILURE;
     }
 

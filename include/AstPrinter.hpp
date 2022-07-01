@@ -8,10 +8,10 @@ class AstPrinter : public expr::Visitor {
   std::string print(const expr::Expr::Ptr& expr);
 
  private:
-  void visit(const expr::Binary& binary) override;
-  void visit(const expr::Grouping& grouping) override;
-  void visit(const expr::Literal& literal) override;
-  void visit(const expr::Unary& unary) override;
+  void visit(expr::Binary& binary) override;
+  void visit(expr::Grouping& grouping) override;
+  void visit(expr::Literal& literal) override;
+  void visit(expr::Unary& unary) override;
 
  private:
   std::string str_;
