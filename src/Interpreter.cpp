@@ -6,13 +6,65 @@
 #include "RuntimeError.hpp"
 
 namespace lox::treewalk {
-void Interpreter::interpret(expr::Expr::Ptr& expr) {
+Interpreter::Interpreter() : environment_{std::make_shared<Environment>()} {}
+
+void Interpreter::interpret(const std::vector<stmt::Stmt::Ptr>& statements) {
   try {
-    evaluate(*expr);
-    std::cout << value_.stringify() << '\n';
+    for (const auto& statement : statements) {
+      execute(*statement);
+    }
   } catch (const RuntimeError& e) {
     runtime_error(e);
   }
+}
+
+void Interpreter::execute(stmt::Stmt& stmt) { stmt.accept(*this); }
+
+void Interpreter::execute_block(const std::vector<stmt::Stmt::Ptr>& statements,
+                                std::shared_ptr<Environment> environment) {
+  auto previous = environment_;
+  try {
+    environment_ = std::move(environment);
+
+    for (const auto& statement : statements) {
+      execute(*statement);
+    }
+
+    environment_ = previous;
+  } catch (const RuntimeError&) {
+    environment_ = previous;
+    throw;
+  }
+}
+
+void Interpreter::visit(stmt::Block& block) {
+  execute_block(block.statements_, std::make_shared<Environment>(environment_));
+}
+
+void Interpreter::visit(stmt::Print& print) {
+  evaluate(*print.expr_);
+  std::cout << value_.stringify() << '\n';
+}
+
+void Interpreter::visit(stmt::Expression& expression) {
+  evaluate(*expression.expr_);
+}
+
+void Interpreter::visit(stmt::Var& var) {
+  auto value = Object{};
+  if (var.initializer_ != nullptr) {
+    evaluate(*var.initializer_);
+    value = std::move(value_);
+  }
+
+  environment_->define(var.name_.get_lexeme(), value);
+}
+
+void Interpreter::evaluate(expr::Expr& expr) { expr.accept(*this); }
+
+void Interpreter::visit(expr::Assign& assign) {
+  evaluate(*assign.value_);
+  environment_->assign(assign.name_, value_);
 }
 
 void Interpreter::visit(expr::Binary& binary) {
@@ -103,7 +155,9 @@ void Interpreter::visit(expr::Unary& unary) {
   }
 }
 
-void Interpreter::evaluate(expr::Expr& expr) { expr.accept(*this); }
+void Interpreter::visit(expr::Variable& unary) {
+  value_ = environment_->get(unary.name_);
+}
 
 void Interpreter::check_number_operand(const Token& op, const Object& operand) {
   if (operand.is<Object::Number>()) {

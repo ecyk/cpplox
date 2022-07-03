@@ -6,19 +6,23 @@
 #include "Token.hpp"
 
 namespace lox::treewalk::expr {
+class Assign;
 class Binary;
 class Grouping;
 class Literal;
 class Unary;
+class Variable;
 
 class Visitor {
  public:
   virtual ~Visitor() = default;
 
+  virtual void visit(Assign& assign) = 0;
   virtual void visit(Binary& binary) = 0;
   virtual void visit(Grouping& grouping) = 0;
   virtual void visit(Literal& literal) = 0;
   virtual void visit(Unary& unary) = 0;
+  virtual void visit(Variable& unary) = 0;
 };
 
 class Expr {
@@ -28,6 +32,17 @@ class Expr {
   virtual ~Expr() = default;
 
   virtual void accept(Visitor& visitor) = 0;
+};
+
+class Assign : public Expr {
+ public:
+  Assign(Token name, Ptr value)
+      : name_{std::move(name)}, value_{std::move(value)} {}
+
+  void accept(Visitor& visitor) override { visitor.visit(*this); }
+
+  Token name_;
+  Ptr value_;
 };
 
 class Binary : public Expr {
@@ -68,5 +83,14 @@ class Unary : public Expr {
 
   Token op_;
   Ptr right_;
+};
+
+class Variable : public Expr {
+ public:
+  Variable(Token name) : name_{std::move(name)} {}
+
+  void accept(Visitor& visitor) override { visitor.visit(*this); }
+
+  Token name_;
 };
 }  // namespace lox::treewalk::expr

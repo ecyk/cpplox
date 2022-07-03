@@ -13,22 +13,22 @@ static void run(const std::string& source) {
   Scanner scanner{source};
   std::vector<Token> tokens = scanner.scan_tokens();
 
-  for (auto& token : tokens) {
-    std::cout << token.to_string() << '\n';
-  }
+  // for (auto& token : tokens) {
+  //   std::cout << token.to_string() << '\n';
+  // }
 
   Parser parser{tokens};
-  auto expr = parser.parse();
+  std::vector<stmt::Stmt::Ptr> statements = parser.parse();
 
   if (s_had_error) {
     return;
   }
 
-  AstPrinter ast_printer;
-  std::cout << ast_printer.print(expr) << '\n';
+  // AstPrinter ast_printer;
+  // std::cout << ast_printer.print(expr) << '\n';
 
   static Interpreter interpreter;
-  interpreter.interpret(expr);
+  interpreter.interpret(statements);
 }
 
 void run_file(const std::string& path) {

@@ -17,13 +17,9 @@ class Object {
   explicit Object(Number value) : value_{value} {}
   explicit Object(Boolean value) : value_{value} {}
 
-  bool Object::operator==(const Object& other) const {
-    return value_ == other.value_;
-  }
+  bool operator==(const Object& other) const { return value_ == other.value_; }
 
-  bool Object::operator!=(const Object& other) const {
-    return !(*this == other);
-  }
+  bool operator!=(const Object& other) const { return !(*this == other); }
 
   template <typename T>
   bool is() const {
