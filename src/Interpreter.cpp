@@ -41,13 +41,22 @@ void Interpreter::visit(stmt::Block& block) {
   execute_block(block.statements_, std::make_shared<Environment>(environment_));
 }
 
+void Interpreter::visit(stmt::Expression& expression) {
+  evaluate(*expression.expr_);
+}
+
+void Interpreter::visit(stmt::If& if_) {
+  evaluate(*if_.condition_);
+  if (is_truthy(value_)) {
+    execute(*if_.then_branch_);
+  } else if (if_.else_branch_) {
+    execute(*if_.else_branch_);
+  }
+}
+
 void Interpreter::visit(stmt::Print& print) {
   evaluate(*print.expr_);
   std::cout << value_.stringify() << '\n';
-}
-
-void Interpreter::visit(stmt::Expression& expression) {
-  evaluate(*expression.expr_);
 }
 
 void Interpreter::visit(stmt::Var& var) {
@@ -58,6 +67,14 @@ void Interpreter::visit(stmt::Var& var) {
   }
 
   environment_->define(var.name_.get_lexeme(), value);
+}
+
+void Interpreter::visit(stmt::While& while_) {
+  evaluate(*while_.condition_);
+  while (is_truthy(value_)) {
+    execute(*while_.body_);
+    evaluate(*while_.condition_);
+  }
 }
 
 void Interpreter::evaluate(expr::Expr& expr) { expr.accept(*this); }
@@ -134,8 +151,22 @@ void Interpreter::visit(expr::Binary& binary) {
 
 void Interpreter::visit(expr::Grouping& grouping) { evaluate(*grouping.expr_); }
 
-void Interpreter::visit(expr::Literal& literal) {
-  value_ = std::move(literal.value_);
+void Interpreter::visit(expr::Literal& literal) { value_ = literal.value_; }
+
+void Interpreter::visit(expr::Logical& logical) {
+  evaluate(*logical.left_);
+
+  if (logical.op_.get_type() == TokenType::OR) {
+    if (is_truthy(value_)) {
+      return;
+    }
+  } else {
+    if (!is_truthy(value_)) {
+      return;
+    }
+  }
+
+  evaluate(*logical.right_);
 }
 
 void Interpreter::visit(expr::Unary& unary) {
@@ -155,8 +186,8 @@ void Interpreter::visit(expr::Unary& unary) {
   }
 }
 
-void Interpreter::visit(expr::Variable& unary) {
-  value_ = environment_->get(unary.name_);
+void Interpreter::visit(expr::Variable& variable) {
+  value_ = environment_->get(variable.name_);
 }
 
 void Interpreter::check_number_operand(const Token& op, const Object& operand) {

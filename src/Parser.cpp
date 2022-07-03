@@ -40,8 +40,17 @@ stmt::Stmt::Ptr Parser::var_declaration() {
 }
 
 stmt::Stmt::Ptr Parser::statement() {
+  if (match(TokenType::FOR)) {
+    return for_statement();
+  }
+  if (match(TokenType::IF)) {
+    return if_statement();
+  }
   if (match(TokenType::PRINT)) {
     return print_statement();
+  }
+  if (match(TokenType::WHILE)) {
+    return while_statement();
   }
   if (match(TokenType::LEFT_BRACE)) {
     return block_statement();
@@ -50,10 +59,80 @@ stmt::Stmt::Ptr Parser::statement() {
   return expression_statement();
 }
 
+stmt::Stmt::Ptr Parser::for_statement() {
+  consume(TokenType::LEFT_PAREN, "Expect '(' after 'for'.");
+  stmt::Stmt::Ptr initializer;
+  if (match(TokenType::SEMICOLON)) {
+  } else if (match(TokenType::VAR)) {
+    initializer = var_declaration();
+  } else {
+    initializer = expression_statement();
+  }
+
+  expr::Expr::Ptr condition;
+  if (!check(TokenType::SEMICOLON)) {
+    condition = expression();
+  }
+  consume(TokenType::SEMICOLON, "Expect ';' after loop condition.");
+
+  expr::Expr::Ptr increment;
+  if (!check(TokenType::RIGHT_PAREN)) {
+    increment = expression();
+  }
+  consume(TokenType::RIGHT_PAREN, "Expect ')' after for clauses.");
+  auto body = statement();
+
+  if (increment) {
+    std::vector<stmt::Stmt::Ptr> loop_statements;
+    loop_statements.push_back(std::move(body));
+    loop_statements.push_back(
+        std::make_unique<stmt::Expression>(std::move(increment)));
+    body = std::make_unique<stmt::Block>(std::move(loop_statements));
+  }
+
+  if (!condition) {
+    condition = std::make_unique<expr::Literal>(Object{true});
+  }
+  body = std::make_unique<stmt::While>(std::move(condition), std::move(body));
+
+  if (initializer) {
+    std::vector<stmt::Stmt::Ptr> block;
+    block.push_back(std::move(initializer));
+    block.push_back(std::move(body));
+    body = std::make_unique<stmt::Block>(std::move(block));
+  }
+
+  return body;
+}
+
+stmt::Stmt::Ptr Parser::if_statement() {
+  consume(TokenType::LEFT_PAREN, "Expect '(' after 'if'.");
+  auto condition = expression();
+  consume(TokenType::RIGHT_PAREN, "Expect ')' after if condition.");
+
+  auto then_branch = statement();
+  stmt::Stmt::Ptr else_branch;
+  if (match(TokenType::ELSE)) {
+    else_branch = statement();
+  }
+
+  return std::make_unique<stmt::If>(
+      std::move(condition), std::move(then_branch), std::move(else_branch));
+}
+
 stmt::Stmt::Ptr Parser::print_statement() {
   auto value = expression();
   consume(TokenType::SEMICOLON, "Expect ';' after value.");
   return std::make_unique<stmt::Print>(std::move(value));
+}
+
+stmt::Stmt::Ptr Parser::while_statement() {
+  consume(TokenType::LEFT_PAREN, "Expect '(' after 'while'.");
+  auto condition = expression();
+  consume(TokenType::RIGHT_PAREN, "Expect ')' after condition.");
+  auto body = statement();
+
+  return std::make_unique<stmt::While>(std::move(condition), std::move(body));
 }
 
 stmt::Stmt::Ptr Parser::block_statement() {
@@ -80,7 +159,7 @@ std::vector<stmt::Stmt::Ptr> Parser::block() {
 expr::Expr::Ptr Parser::expression() { return assignment(); }
 
 expr::Expr::Ptr Parser::assignment() {
-  auto expr = equality();
+  auto expr = logic_or();
 
   if (match(TokenType::EQUAL)) {
     Token& equals = previous();
@@ -93,6 +172,32 @@ expr::Expr::Ptr Parser::assignment() {
     }
 
     error(equals, "Invalid assignment target.");
+  }
+
+  return expr;
+}
+
+expr::Expr::Ptr Parser::logic_or() {
+  auto expr = logic_and();
+
+  while (match(TokenType::OR)) {
+    Token& op = previous();
+    auto right = logic_and();
+    expr =
+        std::make_unique<expr::Logical>(std::move(expr), op, std::move(right));
+  }
+
+  return expr;
+}
+
+expr::Expr::Ptr Parser::logic_and() {
+  auto expr = equality();
+
+  while (match(TokenType::AND)) {
+    Token& op = previous();
+    auto right = equality();
+    expr =
+        std::make_unique<expr::Logical>(std::move(expr), op, std::move(right));
   }
 
   return expr;

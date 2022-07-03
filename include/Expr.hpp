@@ -10,6 +10,7 @@ class Assign;
 class Binary;
 class Grouping;
 class Literal;
+class Logical;
 class Unary;
 class Variable;
 
@@ -21,8 +22,9 @@ class Visitor {
   virtual void visit(Binary& binary) = 0;
   virtual void visit(Grouping& grouping) = 0;
   virtual void visit(Literal& literal) = 0;
+  virtual void visit(Logical& logical) = 0;
   virtual void visit(Unary& unary) = 0;
-  virtual void visit(Variable& unary) = 0;
+  virtual void visit(Variable& variable) = 0;
 };
 
 class Expr {
@@ -73,6 +75,18 @@ class Literal : public Expr {
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
   Object value_;
+};
+
+class Logical : public Expr {
+ public:
+  Logical(Ptr left, Token op, Ptr right)
+      : left_{std::move(left)}, op_{std::move(op)}, right_{std::move(right)} {}
+
+  void accept(Visitor& visitor) override { visitor.visit(*this); }
+
+  Ptr left_;
+  Token op_;
+  Ptr right_;
 };
 
 class Unary : public Expr {

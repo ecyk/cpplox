@@ -20,7 +20,10 @@ class Parser {
   stmt::Stmt::Ptr declaration();
   stmt::Stmt::Ptr var_declaration();
   stmt::Stmt::Ptr statement();
+  stmt::Stmt::Ptr for_statement();
+  stmt::Stmt::Ptr if_statement();
   stmt::Stmt::Ptr print_statement();
+  stmt::Stmt::Ptr while_statement();
   stmt::Stmt::Ptr block_statement();
   stmt::Stmt::Ptr expression_statement();
 
@@ -28,6 +31,8 @@ class Parser {
 
   expr::Expr::Ptr expression();
   expr::Expr::Ptr assignment();
+  expr::Expr::Ptr logic_or();
+  expr::Expr::Ptr logic_and();
   expr::Expr::Ptr equality();
   expr::Expr::Ptr comparison();
   expr::Expr::Ptr term();
