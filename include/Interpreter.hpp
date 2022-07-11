@@ -11,21 +11,28 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
  public:
   Interpreter();
   void interpret(const std::vector<stmt::Stmt::Ptr>& statements);
+  void execute_block(const std::vector<stmt::Stmt::Ptr>& statements,
+                     std::unique_ptr<Environment> environment);
+
+ public:
+  Object value_;
+  bool is_returning_ = false;
 
  private:
-  void execute(stmt::Stmt& stmt);
-  void execute_block(const std::vector<stmt::Stmt::Ptr>& statements,
-                     std::shared_ptr<Environment> environment);
-  void visit(stmt::Block& block);
+  void execute(const stmt::Stmt::Ptr& stmt);
+  void visit(stmt::Block& block) override;
   void visit(stmt::Expression& expression) override;
+  void visit(stmt::Function& function) override;
   void visit(stmt::If& if_) override;
   void visit(stmt::Print& print) override;
+  void visit(stmt::Return& return_) override;
   void visit(stmt::Var& var) override;
   void visit(stmt::While& while_) override;
 
-  void evaluate(expr::Expr& expr);
+  void evaluate(const expr::Expr::Ptr& expr);
   void visit(expr::Assign& assign) override;
   void visit(expr::Binary& binary) override;
+  void visit(expr::Call& call) override;
   void visit(expr::Grouping& grouping) override;
   void visit(expr::Literal& literal) override;
   void visit(expr::Logical& logical) override;
@@ -38,8 +45,7 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
   static bool is_truthy(Object& value);
 
  private:
-  std::shared_ptr<Environment> environment_;
-
-  Object value_;
+  Environment globals_;
+  std::unique_ptr<Environment> environment_;
 };
 }  // namespace lox::treewalk

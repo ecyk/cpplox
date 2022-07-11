@@ -1,94 +1,139 @@
 #include "Interpreter.hpp"
 
+#include <chrono>
 #include <iostream>
 
 #include "Lox.hpp"
+#include "LoxFunction.hpp"
 #include "RuntimeError.hpp"
 
 namespace lox::treewalk {
-Interpreter::Interpreter() : environment_{std::make_shared<Environment>()} {}
+class ClockFn : public LoxCallable {
+ public:
+  size_t arity() override { return 0; }
+  void call([[maybe_unused]] Interpreter& interpreter,
+            [[maybe_unused]] const std::vector<Object>& arguments) override {
+    interpreter.value_ = Object{static_cast<double>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count() /
+        1000.0)};
+  }
+
+  std::string to_string() override { return "<native fn>"; }
+};
+
+Interpreter::Interpreter()
+    : environment_{std::make_unique<Environment>(&globals_)} {
+  globals_.define("clock", Object{std::make_shared<ClockFn>()});
+}
 
 void Interpreter::interpret(const std::vector<stmt::Stmt::Ptr>& statements) {
   try {
     for (const auto& statement : statements) {
-      execute(*statement);
+      execute(statement);
     }
   } catch (const RuntimeError& e) {
     runtime_error(e);
   }
 }
 
-void Interpreter::execute(stmt::Stmt& stmt) { stmt.accept(*this); }
-
 void Interpreter::execute_block(const std::vector<stmt::Stmt::Ptr>& statements,
-                                std::shared_ptr<Environment> environment) {
-  auto previous = environment_;
-  try {
-    environment_ = std::move(environment);
+                                std::unique_ptr<Environment> environment) {
+  auto previous = std::move(environment_);
 
-    for (const auto& statement : statements) {
-      execute(*statement);
-    }
+  // try {
+  environment_ = std::move(environment);
 
-    environment_ = previous;
-  } catch (const RuntimeError&) {
-    environment_ = previous;
-    throw;
+  for (const auto& statement : statements) {
+    execute(statement);
   }
+  // } catch (...) {
+  //   environment_ = previous;
+  //   throw;
+  // }
+
+  environment_ = std::move(previous);
+}
+
+void Interpreter::execute(const stmt::Stmt::Ptr& stmt) {
+  if (is_returning_) {
+    return;
+  }
+
+  stmt->accept(*this);
 }
 
 void Interpreter::visit(stmt::Block& block) {
-  execute_block(block.statements_, std::make_shared<Environment>(environment_));
+  execute_block(block.statements_,
+                std::make_unique<Environment>(environment_.get()));
 }
 
 void Interpreter::visit(stmt::Expression& expression) {
-  evaluate(*expression.expr_);
+  evaluate(expression.expr_);
+}
+
+void Interpreter::visit(stmt::Function& function) {
+  auto name = function.name_.get_lexeme();
+  environment_->define(name, Object{std::make_shared<LoxFunction>(
+                                 std::move(function), environment_.get())});
 }
 
 void Interpreter::visit(stmt::If& if_) {
-  evaluate(*if_.condition_);
+  evaluate(if_.condition_);
   if (is_truthy(value_)) {
-    execute(*if_.then_branch_);
+    execute(if_.then_branch_);
   } else if (if_.else_branch_) {
-    execute(*if_.else_branch_);
+    execute(if_.else_branch_);
   }
 }
 
 void Interpreter::visit(stmt::Print& print) {
-  evaluate(*print.expr_);
+  evaluate(print.expr_);
   std::cout << value_.stringify() << '\n';
 }
 
-void Interpreter::visit(stmt::Var& var) {
-  auto value = Object{};
-  if (var.initializer_ != nullptr) {
-    evaluate(*var.initializer_);
-    value = std::move(value_);
+void Interpreter::visit(stmt::Return& return_) {
+  if (return_.value_) {
+    evaluate(return_.value_);
   }
 
-  environment_->define(var.name_.get_lexeme(), value);
+  is_returning_ = true;
+  // throw Return(value);
+}
+
+void Interpreter::visit(stmt::Var& var) {
+  if (var.initializer_) {
+    evaluate(var.initializer_);
+  } else {
+    value_ = {};
+  }
+
+  environment_->define(var.name_.get_lexeme(), std::move(value_));
 }
 
 void Interpreter::visit(stmt::While& while_) {
-  evaluate(*while_.condition_);
-  while (is_truthy(value_)) {
-    execute(*while_.body_);
-    evaluate(*while_.condition_);
+  while (true) {
+    evaluate(while_.condition_);
+    if (!is_truthy(value_)) {
+      return;
+    }
+    execute(while_.body_);
   }
 }
 
-void Interpreter::evaluate(expr::Expr& expr) { expr.accept(*this); }
+void Interpreter::evaluate(const expr::Expr::Ptr& expr) { expr->accept(*this); }
 
 void Interpreter::visit(expr::Assign& assign) {
-  evaluate(*assign.value_);
+  evaluate(assign.value_);
   environment_->assign(assign.name_, value_);
 }
 
 void Interpreter::visit(expr::Binary& binary) {
-  evaluate(*binary.left_);
+  evaluate(binary.left_);
   auto left = std::move(value_);
 
-  evaluate(*binary.right_);
+  evaluate(binary.right_);
   auto right = std::move(value_);
 
   switch (binary.op_.get_type()) {
@@ -149,12 +194,37 @@ void Interpreter::visit(expr::Binary& binary) {
   }
 }
 
-void Interpreter::visit(expr::Grouping& grouping) { evaluate(*grouping.expr_); }
+void Interpreter::visit(expr::Call& call) {
+  evaluate(call.callee_);
+  auto callee = std::move(value_);
+
+  std::vector<Object> arguments;
+  for (const auto& argument : call.arguments_) {
+    evaluate(argument);
+    arguments.push_back(std::move(value_));
+  }
+
+  if (!callee.is<Object::Callable>()) {
+    throw RuntimeError(call.paren_, "Can only call functions and classes.");
+  }
+
+  auto& function = callee.get<Object::Callable>();
+  if (arguments.size() != function->arity()) {
+    throw RuntimeError(call.paren_, "Expected " +
+                                        std::to_string(function->arity()) +
+                                        " arguments but got " +
+                                        std::to_string(arguments.size()) + ".");
+  }
+
+  function->call(*this, arguments);
+}
+
+void Interpreter::visit(expr::Grouping& grouping) { evaluate(grouping.expr_); }
 
 void Interpreter::visit(expr::Literal& literal) { value_ = literal.value_; }
 
 void Interpreter::visit(expr::Logical& logical) {
-  evaluate(*logical.left_);
+  evaluate(logical.left_);
 
   if (logical.op_.get_type() == TokenType::OR) {
     if (is_truthy(value_)) {
@@ -166,11 +236,11 @@ void Interpreter::visit(expr::Logical& logical) {
     }
   }
 
-  evaluate(*logical.right_);
+  evaluate(logical.right_);
 }
 
 void Interpreter::visit(expr::Unary& unary) {
-  evaluate(*unary.right_);
+  evaluate(unary.right_);
   auto right = std::move(value_);
 
   switch (unary.op_.get_type()) {

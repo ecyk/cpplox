@@ -11,6 +11,7 @@ set(SOURCES
     src/Parser.cpp
     src/Interpreter.cpp
     src/Environment.cpp
+    src/Object.cpp
 )
 
 add_executable(cpplox ${SOURCES})

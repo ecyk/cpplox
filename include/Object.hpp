@@ -1,24 +1,27 @@
 #pragma once
 
+#include <memory>
 #include <string>
 #include <variant>
 
 namespace lox::treewalk {
+class LoxCallable;
 class Object {
  public:
-  using Nil = const void*;
+  using Nil = std::monostate;
   using String = std::string;
   using Number = double;
   using Boolean = bool;
+  using Callable = std::shared_ptr<LoxCallable>;
 
  public:
-  Object() : value_{nullptr} {}
-  explicit Object(String value) : value_{std::move(value)} {}
-  explicit Object(Number value) : value_{value} {}
-  explicit Object(Boolean value) : value_{value} {}
+  Object() = default;
+  explicit Object(String value);
+  explicit Object(Number value);
+  explicit Object(Boolean value);
+  explicit Object(Callable value);
 
   bool operator==(const Object& other) const { return value_ == other.value_; }
-
   bool operator!=(const Object& other) const { return !(*this == other); }
 
   template <typename T>
@@ -31,24 +34,9 @@ class Object {
     return std::get<T>(value_);
   }
 
-  std::string stringify() {
-    if (is<Nil>()) {
-      return "nil";
-    } else if (is<String>()) {
-      return get<String>();
-    } else if (is<Number>()) {
-      return std::to_string(get<Number>());
-    } else if (is<Boolean>()) {
-      if (get<Boolean>()) {
-        return "true";
-      } else {
-        return "false";
-      }
-    }
-    return "";
-  }
+  std::string stringify();
 
  private:
-  std::variant<Nil, String, Number, Boolean> value_;
+  std::variant<Nil, String, Number, Boolean, Callable> value_;
 };
 }  // namespace lox::treewalk

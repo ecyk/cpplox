@@ -7,8 +7,10 @@
 namespace lox::treewalk::stmt {
 class Block;
 class Expression;
+class Function;
 class If;
 class Print;
+class Return;
 class Var;
 class While;
 
@@ -18,8 +20,10 @@ class Visitor {
 
   virtual void visit(Block& block) = 0;
   virtual void visit(Expression& expression) = 0;
+  virtual void visit(Function& function) = 0;
   virtual void visit(If& if_) = 0;
   virtual void visit(Print& print) = 0;
+  virtual void visit(Return& return_) = 0;
   virtual void visit(Var& var) = 0;
   virtual void visit(While& while_) = 0;
 };
@@ -52,6 +56,20 @@ class Expression : public Stmt {
   expr::Expr::Ptr expr_;
 };
 
+class Function : public Stmt {
+ public:
+  Function(Token name, std::vector<Token> params, std::vector<Ptr> body)
+      : name_{std::move(name)},
+        params_{std::move(params)},
+        body_{std::move(body)} {}
+
+  void accept(Visitor& visitor) override { visitor.visit(*this); }
+
+  Token name_;
+  std::vector<Token> params_;
+  std::vector<Ptr> body_;
+};
+
 class If : public Stmt {
  public:
   If(expr::Expr::Ptr condition, Ptr then_branch, Ptr else_branch)
@@ -73,6 +91,17 @@ class Print : public Stmt {
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
   expr::Expr::Ptr expr_;
+};
+
+class Return : public Stmt {
+ public:
+  explicit Return(Token keyword, expr::Expr::Ptr value)
+      : keyword_{std::move(keyword)}, value_{std::move(value)} {}
+
+  void accept(Visitor& visitor) override { visitor.visit(*this); }
+
+  Token keyword_;
+  expr::Expr::Ptr value_;
 };
 
 class Var : public Stmt {

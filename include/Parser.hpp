@@ -18,16 +18,19 @@ class Parser {
 
  private:
   stmt::Stmt::Ptr declaration();
+  stmt::Stmt::Ptr fun_declaration(const std::string& kind);
   stmt::Stmt::Ptr var_declaration();
   stmt::Stmt::Ptr statement();
   stmt::Stmt::Ptr for_statement();
   stmt::Stmt::Ptr if_statement();
   stmt::Stmt::Ptr print_statement();
+  stmt::Stmt::Ptr return_statement();
   stmt::Stmt::Ptr while_statement();
   stmt::Stmt::Ptr block_statement();
   stmt::Stmt::Ptr expression_statement();
 
   std::vector<stmt::Stmt::Ptr> block();
+  expr::Expr::Ptr finish_call(expr::Expr::Ptr callee);
 
   expr::Expr::Ptr expression();
   expr::Expr::Ptr assignment();
@@ -38,6 +41,7 @@ class Parser {
   expr::Expr::Ptr term();
   expr::Expr::Ptr factor();
   expr::Expr::Ptr unary();
+  expr::Expr::Ptr call();
   expr::Expr::Ptr primary();
 
   bool match(TokenType type);

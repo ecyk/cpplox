@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include "Object.hpp"
 #include "Token.hpp"
@@ -8,6 +9,7 @@
 namespace lox::treewalk::expr {
 class Assign;
 class Binary;
+class Call;
 class Grouping;
 class Literal;
 class Logical;
@@ -20,6 +22,7 @@ class Visitor {
 
   virtual void visit(Assign& assign) = 0;
   virtual void visit(Binary& binary) = 0;
+  virtual void visit(Call& call) = 0;
   virtual void visit(Grouping& grouping) = 0;
   virtual void visit(Literal& literal) = 0;
   virtual void visit(Logical& logical) = 0;
@@ -57,6 +60,20 @@ class Binary : public Expr {
   Ptr left_;
   Token op_;
   Ptr right_;
+};
+
+class Call : public Expr {
+ public:
+  Call(Ptr callee, Token paren, std::vector<Ptr> arguments)
+      : callee_{std::move(callee)},
+        paren_{std::move(paren)},
+        arguments_{std::move(arguments)} {}
+
+  void accept(Visitor& visitor) override { visitor.visit(*this); }
+
+  Ptr callee_;
+  Token paren_;
+  std::vector<Ptr> arguments_;
 };
 
 class Grouping : public Expr {

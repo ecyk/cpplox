@@ -3,15 +3,14 @@
 #include "RuntimeError.hpp"
 
 namespace lox::treewalk {
-Environment::Environment(std::shared_ptr<Environment> enclosing)
-    : enclosing_{std::move(enclosing)} {}
+Environment::Environment(Environment* enclosing) : enclosing_{enclosing} {}
 
 Object& Environment::get(const Token& name) {
   if (auto it = values_.find(name.get_lexeme()); it != values_.end()) {
     return it->second;
   }
 
-  if (enclosing_) {
+  if (enclosing_ != nullptr) {
     return enclosing_->get(name);
   }
 
@@ -24,14 +23,14 @@ void Environment::assign(const Token& name, const Object& value) {
     return;
   }
 
-  if (enclosing_) {
+  if (enclosing_ != nullptr) {
     return enclosing_->assign(name, value);
   }
 
   throw RuntimeError(name, "Undefined variable '" + name.get_lexeme() + "'.");
 }
 
-void Environment::define(const std::string& name, const Object& value) {
-  values_.insert_or_assign(name, value);
+void Environment::define(const std::string& name, Object value) {
+  values_.insert_or_assign(name, std::move(value));
 }
 }  // namespace lox::treewalk

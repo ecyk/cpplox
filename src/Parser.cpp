@@ -16,6 +16,9 @@ std::vector<stmt::Stmt::Ptr> Parser::parse() {
 
 stmt::Stmt::Ptr Parser::declaration() {
   try {
+    if (match(TokenType::FUN)) {
+      return fun_declaration("function");
+    }
     if (match(TokenType::VAR)) {
       return var_declaration();
     }
@@ -25,6 +28,28 @@ stmt::Stmt::Ptr Parser::declaration() {
     synchronize();
     return {};
   }
+}
+
+stmt::Stmt::Ptr Parser::fun_declaration(const std::string& kind) {
+  Token& name = consume(TokenType::IDENTIFIER, "Expect " + kind + " name.");
+  consume(TokenType::LEFT_PAREN, "Expect '(' after " + kind + " name.");
+  std::vector<Token> parameters;
+  if (!check(TokenType::RIGHT_PAREN)) {
+    do {
+      if (parameters.size() >= 255) {
+        error(peek(), "Can't have more than 255 parameters.");
+      }
+
+      parameters.push_back(
+          consume(TokenType::IDENTIFIER, "Expect parameter name."));
+    } while (match(TokenType::COMMA));
+  }
+  consume(TokenType::RIGHT_PAREN, "Expect ')' after parameters.");
+
+  consume(TokenType::LEFT_BRACE, "Expect '{' before " + kind + " body.");
+  auto body = block();
+  return std::make_unique<stmt::Function>(name, std::move(parameters),
+                                          std::move(body));
 }
 
 stmt::Stmt::Ptr Parser::var_declaration() {
@@ -48,6 +73,9 @@ stmt::Stmt::Ptr Parser::statement() {
   }
   if (match(TokenType::PRINT)) {
     return print_statement();
+  }
+  if (match(TokenType::RETURN)) {
+    return return_statement();
   }
   if (match(TokenType::WHILE)) {
     return while_statement();
@@ -126,6 +154,17 @@ stmt::Stmt::Ptr Parser::print_statement() {
   return std::make_unique<stmt::Print>(std::move(value));
 }
 
+stmt::Stmt::Ptr Parser::return_statement() {
+  Token& keyword = previous();
+  expr::Expr::Ptr value;
+  if (!check(TokenType::SEMICOLON)) {
+    value = expression();
+  }
+
+  consume(TokenType::SEMICOLON, "Expect ';' after return value.");
+  return std::make_unique<stmt::Return>(keyword, std::move(value));
+}
+
 stmt::Stmt::Ptr Parser::while_statement() {
   consume(TokenType::LEFT_PAREN, "Expect '(' after 'while'.");
   auto condition = expression();
@@ -154,6 +193,23 @@ std::vector<stmt::Stmt::Ptr> Parser::block() {
 
   consume(TokenType::RIGHT_BRACE, "Expect '}' after block.");
   return statements;
+}
+
+expr::Expr::Ptr Parser::finish_call(expr::Expr::Ptr callee) {
+  std::vector<expr::Expr::Ptr> arguments;
+  if (!check(TokenType::RIGHT_PAREN)) {
+    do {
+      if (arguments.size() >= 255) {
+        error(peek(), "Can't have more than 255 arguments.");
+      }
+      arguments.push_back(expression());
+    } while (match(TokenType::COMMA));
+  }
+
+  Token& paren = consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments.");
+
+  return std::make_unique<expr::Call>(std::move(callee), paren,
+                                      std::move(arguments));
 }
 
 expr::Expr::Ptr Parser::expression() { return assignment(); }
@@ -263,7 +319,21 @@ expr::Expr::Ptr Parser::unary() {
     return std::make_unique<expr::Unary>(op, std::move(right));
   }
 
-  return primary();
+  return call();
+}
+
+expr::Expr::Ptr Parser::call() {
+  auto expr = primary();
+
+  while (true) {
+    if (match(TokenType::LEFT_PAREN)) {
+      expr = finish_call(std::move(expr));
+    } else {
+      break;
+    }
+  }
+
+  return expr;
 }
 
 expr::Expr::Ptr Parser::primary() {
