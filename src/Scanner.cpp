@@ -3,7 +3,7 @@
 #include "Lox.hpp"
 
 namespace lox::treewalk {
-static const std::unordered_map<std::string, TokenType> keywords_ = {  // NOLINT
+static const std::unordered_map<std::string, TokenType> keywords_ = {
     {"and", TokenType::AND},       {"class", TokenType::CLASS},
     {"else", TokenType::ELSE},     {"false", TokenType::FALSE},
     {"for", TokenType::FOR},       {"fun", TokenType::FUN},

@@ -4,7 +4,7 @@
 
 using namespace lox;
 
-int main(int argc, char* argv[]) {  // NOLINT
+int main(int argc, char* argv[]) {
   try {
     if (argc > 2) {
       std::cerr << "Usage: cpplox [script]";

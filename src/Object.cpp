@@ -3,30 +3,25 @@
 #include "LoxCallable.hpp"
 
 namespace lox::treewalk {
-Object::Object(String value) : value_{std::move(value)} {}
-Object::Object(Number value) : value_{value} {}
-Object::Object(Boolean value) : value_{value} {}
-Object::Object(Callable value) : value_{std::move(value)} {}
-
-std::string Object::stringify() {
-  if (is<Nil>()) {
+std::string stringify(const Object& object) {
+  if (is<Nil>(object)) {
     return "nil";
   }
-  if (is<String>()) {
-    return get<String>();
+  if (is<String>(object)) {
+    return std::get<String>(object);
   }
-  if (is<Number>()) {
-    return std::to_string(get<Number>());
+  if (is<Number>(object)) {
+    return std::to_string(std::get<Number>(object));
   }
-  if (is<Boolean>()) {
-    if (get<Boolean>()) {
+  if (is<Boolean>(object)) {
+    if (std::get<Boolean>(object)) {
       return "true";
     } else {
       return "false";
     }
   }
-  if (is<Callable>()) {
-    return get<Callable>()->to_string();
+  if (is<Callable>(object)) {
+    return std::get<Callable>(object)->to_string();
   }
 
   return "";

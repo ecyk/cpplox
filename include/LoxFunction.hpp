@@ -9,7 +9,8 @@ class LoxFunction : public LoxCallable {
   explicit LoxFunction(stmt::Function declaration, Environment* closure)
       : declaration_{std::move(declaration)}, closure_{closure} {}
 
-  size_t arity() override { return declaration_.params_.size(); }
+  size_t arity() const override { return declaration_.params_.size(); }
+
   void call(Interpreter& interpreter,
             const std::vector<Object>& arguments) override {
     auto environment = std::make_unique<Environment>(closure_);
@@ -27,7 +28,7 @@ class LoxFunction : public LoxCallable {
     interpreter.is_returning_ = false;
   }
 
-  std::string to_string() override {
+  std::string to_string() const override {
     return "<fn " + declaration_.name_.get_lexeme() + ">";
   }
 

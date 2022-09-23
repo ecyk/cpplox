@@ -4,14 +4,14 @@ project(cpplox LANGUAGES CXX)
 
 set(SOURCES
     src/AstPrinter.cpp
-    src/Main.cpp
-    src/Lox.cpp
-    src/Token.cpp
-    src/Scanner.cpp
-    src/Parser.cpp
-    src/Interpreter.cpp
     src/Environment.cpp
+    src/Interpreter.cpp
+    src/Lox.cpp
+    src/Main.cpp
     src/Object.cpp
+    src/Parser.cpp
+    src/Scanner.cpp
+    src/Token.cpp
 )
 
 add_executable(cpplox ${SOURCES})

@@ -23,7 +23,7 @@ void AstPrinter::visit(expr::Grouping& grouping) {
 }
 
 void AstPrinter::visit(expr::Literal& literal) {
-  str_ += literal.value_.stringify();
+  str_ += stringify(literal.value_);
 }
 
 void AstPrinter::visit(expr::Unary& unary) {

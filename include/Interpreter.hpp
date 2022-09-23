@@ -15,7 +15,7 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
                      std::unique_ptr<Environment> environment);
 
  public:
-  Object value_;
+  Object value_{};
   bool is_returning_ = false;
 
  private:
