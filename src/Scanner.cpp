@@ -3,16 +3,6 @@
 #include "Lox.hpp"
 
 namespace lox::treewalk {
-static const std::unordered_map<std::string, TokenType> keywords_ = {
-    {"and", TokenType::AND},       {"class", TokenType::CLASS},
-    {"else", TokenType::ELSE},     {"false", TokenType::FALSE},
-    {"for", TokenType::FOR},       {"fun", TokenType::FUN},
-    {"if", TokenType::IF},         {"nil", TokenType::NIL},
-    {"or", TokenType::OR},         {"print", TokenType::PRINT},
-    {"return", TokenType::RETURN}, {"super", TokenType::SUPER},
-    {"this", TokenType::THIS},     {"true", TokenType::TRUE},
-    {"var", TokenType::VAR},       {"while", TokenType::WHILE}};
-
 Scanner::Scanner(std::string source) : source_{std::move(source)} {}
 
 std::vector<Token> Scanner::scan_tokens() {
@@ -179,6 +169,16 @@ void Scanner::identifier() {
   while ((std::isalnum(peek()) != 0) || peek() == '_') {
     advance();
   }
+
+  static const std::unordered_map<std::string, TokenType> keywords_ = {
+      {"and", TokenType::AND},       {"class", TokenType::CLASS},
+      {"else", TokenType::ELSE},     {"false", TokenType::FALSE},
+      {"for", TokenType::FOR},       {"fun", TokenType::FUN},
+      {"if", TokenType::IF},         {"nil", TokenType::NIL},
+      {"or", TokenType::OR},         {"print", TokenType::PRINT},
+      {"return", TokenType::RETURN}, {"super", TokenType::SUPER},
+      {"this", TokenType::THIS},     {"true", TokenType::TRUE},
+      {"var", TokenType::VAR},       {"while", TokenType::WHILE}};
 
   if (auto it = keywords_.find(source_.substr(start_, current_ - start_));
       it != keywords_.end()) {

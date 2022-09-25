@@ -37,6 +37,9 @@ class Expr {
   virtual ~Expr() = default;
 
   virtual void accept(Visitor& visitor) = 0;
+
+ public:
+  int depth_{-1};
 };
 
 class Assign : public Expr {

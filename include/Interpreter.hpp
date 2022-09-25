@@ -3,7 +3,6 @@
 #include <vector>
 
 #include "Environment.hpp"
-#include "Expr.hpp"
 #include "Stmt.hpp"
 
 namespace lox::treewalk {
@@ -16,7 +15,7 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
 
  public:
   Object value_{};
-  bool is_returning_ = false;
+  bool is_returning_{false};
 
  private:
   void execute(const stmt::Stmt::Ptr& stmt);
@@ -39,13 +38,15 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
   void visit(expr::Unary& unary) override;
   void visit(expr::Variable& variable) override;
 
+  Object& look_up_variable(const Token& name, const expr::Expr& expr);
+
   static void check_number_operand(const Token& op, const Object& operand);
   static void check_number_operands(const Token& op, const Object& left,
                                     const Object& right);
   static bool is_truthy(Object& value);
 
  private:
-  Environment globals_;
   std::unique_ptr<Environment> environment_;
+  Environment* globals_;
 };
 }  // namespace lox::treewalk

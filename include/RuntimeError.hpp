@@ -11,6 +11,7 @@ class RuntimeError : public std::runtime_error {
   RuntimeError(const Token& token, const std::string& message)
       : token_{token}, runtime_error{message} {}
 
+ public:
   Token token_;
 };
 }  // namespace lox::treewalk

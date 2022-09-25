@@ -13,11 +13,12 @@ class ClockFn : public LoxCallable {
 
   void call(Interpreter& interpreter,
             const std::vector<Object>& /*arguments*/) override {
-    interpreter.value_ =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch())
-            .count() /
-        1000.0;
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count();
+
+    constexpr double ms_to_seconds = 1.0 / 1000;
+    interpreter.value_ = static_cast<double>(ms) * ms_to_seconds;
   }
 
   [[nodiscard]] std::string to_string() const override { return "<native fn>"; }
@@ -29,8 +30,9 @@ bool number_compare(Number a, Number b) {
 }
 
 Interpreter::Interpreter()
-    : environment_{std::make_unique<Environment>(&globals_)} {
-  globals_.define("clock", std::make_shared<ClockFn>());
+    : environment_{std::make_unique<Environment>(nullptr)},
+      globals_{environment_.get()} {
+  globals_->define("clock", std::make_shared<ClockFn>());
 }
 
 void Interpreter::interpret(const std::vector<stmt::Stmt::Ptr>& statements) {
@@ -79,7 +81,7 @@ void Interpreter::visit(stmt::Expression& expression) {
 }
 
 void Interpreter::visit(stmt::Function& function) {
-  auto name = function.name_.get_lexeme();
+  const std::string& name = function.name_.get_lexeme();
   environment_->define(name, std::make_shared<LoxFunction>(std::move(function),
                                                            environment_.get()));
 }
@@ -131,12 +133,19 @@ void Interpreter::evaluate(const expr::Expr::Ptr& expr) { expr->accept(*this); }
 
 void Interpreter::visit(expr::Assign& assign) {
   evaluate(assign.value_);
-  environment_->assign(assign.name_, std::move(value_));
+
+  int distance = assign.depth_;
+  if (distance >= 0) {
+    environment_->assign_at(distance, assign.name_, std::move(value_));
+  } else {
+    globals_->assign(assign.name_, std::move(value_));
+  }
 }
 
 void Interpreter::visit(expr::Binary& binary) {
   evaluate(binary.left_);
   auto left = std::move(value_);
+  value_ = {};
 
   evaluate(binary.right_);
   auto right = std::move(value_);
@@ -257,7 +266,17 @@ void Interpreter::visit(expr::Unary& unary) {
 }
 
 void Interpreter::visit(expr::Variable& variable) {
-  value_ = environment_->get(variable.name_);
+  value_ = look_up_variable(variable.name_, variable);
+}
+
+Object& Interpreter::look_up_variable(const Token& name,
+                                      const expr::Expr& expr) {
+  int distance = expr.depth_;
+  if (distance >= 0) {
+    return environment_->get_at(distance, name);
+  }
+
+  return globals_->get(name);
 }
 
 void Interpreter::check_number_operand(const Token& op, const Object& operand) {

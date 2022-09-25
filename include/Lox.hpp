@@ -7,8 +7,8 @@
 namespace lox::treewalk {
 class Token;
 
-inline bool s_had_error = false;
-inline bool s_had_runtime_error = false;
+inline bool s_had_error{false};
+inline bool s_had_runtime_error{false};
 
 void run_file(const std::string& path);
 void run_prompt();

@@ -33,7 +33,7 @@ class Scanner {
   std::string source_;
 
   std::vector<Token> tokens_;
-  size_t start_ = 0, current_ = 0;
-  size_t line_ = 1;
+  size_t start_{0}, current_{0};
+  size_t line_{1};
 };
 }  // namespace lox::treewalk

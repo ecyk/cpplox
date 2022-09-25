@@ -36,7 +36,8 @@ stmt::Stmt::Ptr Parser::fun_declaration(const std::string& kind) {
   std::vector<Token> parameters;
   if (!check(TokenType::RIGHT_PAREN)) {
     do {
-      if (parameters.size() >= 255) {
+      constexpr size_t max_parameter_count = 255;
+      if (parameters.size() >= max_parameter_count) {
         error(peek(), "Can't have more than 255 parameters.");
       }
 
@@ -199,7 +200,8 @@ expr::Expr::Ptr Parser::finish_call(expr::Expr::Ptr callee) {
   std::vector<expr::Expr::Ptr> arguments;
   if (!check(TokenType::RIGHT_PAREN)) {
     do {
-      if (arguments.size() >= 255) {
+      constexpr size_t max_argument_count = 255;
+      if (arguments.size() >= max_argument_count) {
         error(peek(), "Can't have more than 255 arguments.");
       }
       arguments.push_back(expression());

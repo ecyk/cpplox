@@ -2,7 +2,6 @@
 
 #include <vector>
 
-#include "Expr.hpp"
 #include "Stmt.hpp"
 
 namespace lox::treewalk {
@@ -59,6 +58,6 @@ class Parser {
 
  private:
   std::vector<Token> tokens_;
-  size_t current_ = 0;
+  size_t current_{0};
 };
 }  // namespace lox::treewalk

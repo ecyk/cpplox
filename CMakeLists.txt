@@ -10,6 +10,7 @@ set(SOURCES
     src/Main.cpp
     src/Object.cpp
     src/Parser.cpp
+    src/Resolver.cpp
     src/Scanner.cpp
     src/Token.cpp
 )

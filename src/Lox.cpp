@@ -6,6 +6,7 @@
 #include "AstPrinter.hpp"
 #include "Interpreter.hpp"
 #include "Parser.hpp"
+#include "Resolver.hpp"
 #include "Scanner.hpp"
 
 namespace lox::treewalk {
@@ -26,6 +27,13 @@ static void run(const std::string& source) {
 
   // AstPrinter ast_printer;
   // std::cout << ast_printer.print(expr) << '\n';
+
+  Resolver resolver;
+  resolver.resolve(statements);
+
+  if (s_had_error) {
+    return;
+  }
 
   static Interpreter interpreter;
   interpreter.interpret(statements);

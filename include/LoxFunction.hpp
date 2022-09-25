@@ -32,6 +32,7 @@ class LoxFunction : public LoxCallable {
     return "<fn " + declaration_.name_.get_lexeme() + ">";
   }
 
+ public:
   stmt::Function declaration_;
   Environment* closure_;
 };
