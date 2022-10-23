@@ -10,6 +10,9 @@
 #include "Scanner.hpp"
 
 namespace lox::treewalk {
+static bool s_had_error{false};
+static bool s_had_runtime_error{false};
+
 static void run(const std::string& source) {
   Scanner scanner{source};
   std::vector<Token> tokens = scanner.scan_tokens();
@@ -18,8 +21,8 @@ static void run(const std::string& source) {
   //   std::cout << token.to_string() << '\n';
   // }
 
-  Parser parser{tokens};
-  std::vector<stmt::Stmt::Ptr> statements = parser.parse();
+  Parser parser{std::move(tokens)};
+  std::vector<Scope<Stmt>> statements = parser.parse();
 
   if (s_had_error) {
     return;
@@ -39,13 +42,22 @@ static void run(const std::string& source) {
   interpreter.interpret(statements);
 }
 
-void run_file(const std::string& path) {
+int run_file(const std::string& path) {
   std::ifstream file_stream{path};
   file_stream.exceptions(std::ifstream::badbit | std::ifstream::failbit);
   std::string source{std::istreambuf_iterator<char>{file_stream},
                      std::istreambuf_iterator<char>{}};
 
   run(source);
+
+  if (s_had_error) {
+    return 65;
+  }
+  if (s_had_runtime_error) {
+    return 70;
+  }
+
+  return 0;
 }
 
 void run_prompt() {
@@ -64,7 +76,7 @@ void run_prompt() {
 }
 
 void runtime_error(const RuntimeError& error) {
-  std::cout << std::string{error.what()} + "\n[line " +
+  std::cerr << std::string{error.what()} + "\n[line " +
                    std::to_string(error.token_.get_line()) + "]\n";
   s_had_runtime_error = true;
 }
@@ -82,7 +94,7 @@ void error(size_t line, const std::string& message) {
 }
 
 void report(size_t line, const std::string& where, const std::string& message) {
-  std::cout << "[line " + std::to_string(line) + "] Error" + where + ": " +
+  std::cerr << "[line " + std::to_string(line) + "] Error" + where + ": " +
                    message
             << '\n';
   s_had_error = true;

@@ -6,14 +6,15 @@
 
 namespace lox::treewalk {
 class Resolver : public expr::Visitor, public stmt::Visitor {
-  using Scope = std::unordered_map<std::string, bool>;
+  using ScopeMap = std::unordered_map<std::string, bool>;
 
  public:
-  void resolve(const std::vector<stmt::Stmt::Ptr>& statements);
+  void resolve(const std::vector<Scope<Stmt>>& statements);
 
  private:
-  void resolve(const stmt::Stmt::Ptr& stmt);
+  void resolve(const Scope<Stmt>& stmt);
   void visit(stmt::Block& block) override;
+  void visit(stmt::Class& class_) override;
   void visit(stmt::Expression& expression) override;
   void visit(stmt::Function& function) override;
   void visit(stmt::If& if_) override;
@@ -22,13 +23,16 @@ class Resolver : public expr::Visitor, public stmt::Visitor {
   void visit(stmt::Var& var) override;
   void visit(stmt::While& while_) override;
 
-  void resolve(const expr::Expr::Ptr& expr);
+  void resolve(const Scope<Expr>& expr);
   void visit(expr::Assign& assign) override;
   void visit(expr::Binary& binary) override;
   void visit(expr::Call& call) override;
+  void visit(expr::Get& get) override;
   void visit(expr::Grouping& grouping) override;
   void visit(expr::Literal& literal) override;
   void visit(expr::Logical& logical) override;
+  void visit(expr::Set& set) override;
+  void visit(expr::This& this_) override;
   void visit(expr::Unary& unary) override;
   void visit(expr::Variable& variable) override;
 
@@ -40,11 +44,14 @@ class Resolver : public expr::Visitor, public stmt::Visitor {
 
   void resolve_local(expr::Expr& expr, const Token& name);
 
-  enum class FunctionType { NONE, FUNCTION };
+  enum class FunctionType { NONE, FUNCTION, METHOD };
   void resolve_function(const stmt::Function& function, FunctionType type);
 
  private:
-  std::vector<Scope> scopes_;
+  std::vector<ScopeMap> scopes_;
   FunctionType current_function_{FunctionType::NONE};
+
+  enum class ClassType { NONE, CLASS };
+  ClassType current_class_{ClassType::NONE};
 };
 }  // namespace lox::treewalk

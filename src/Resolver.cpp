@@ -3,18 +3,39 @@
 #include "Lox.hpp"
 
 namespace lox::treewalk {
-void Resolver::resolve(const std::vector<stmt::Stmt::Ptr>& statements) {
+void Resolver::resolve(const std::vector<Scope<Stmt>>& statements) {
   for (const auto& statement : statements) {
     resolve(statement);
   }
 }
 
-void Resolver::resolve(const stmt::Stmt::Ptr& stmt) { stmt->accept(*this); }
+void Resolver::resolve(const Scope<Stmt>& stmt) { stmt->accept(*this); }
 
 void Resolver::visit(stmt::Block& block) {
   begin_scope();
   resolve(block.statements_);
   end_scope();
+}
+
+void Resolver::visit(stmt::Class& class_) {
+  ClassType enclosing_class = current_class_;
+  current_class_ = ClassType::CLASS;
+
+  declare(class_.name_);
+  define(class_.name_);
+
+  begin_scope();
+
+  ScopeMap& scope = scopes_.back();
+  scope.insert_or_assign("this", true);
+
+  for (const auto& method : class_.methods_) {
+    resolve_function(method, FunctionType::METHOD);
+  }
+
+  end_scope();
+
+  current_class_ = enclosing_class;
 }
 
 void Resolver::visit(stmt::Expression& expression) {
@@ -62,7 +83,7 @@ void Resolver::visit(stmt::While& while_) {
   resolve(while_.body_);
 }
 
-void Resolver::resolve(const expr::Expr::Ptr& expr) { expr->accept(*this); }
+void Resolver::resolve(const Scope<Expr>& expr) { expr->accept(*this); }
 
 void Resolver::visit(expr::Assign& assign) {
   resolve(assign.value_);
@@ -82,6 +103,8 @@ void Resolver::visit(expr::Call& call) {
   }
 }
 
+void Resolver::visit(expr::Get& get) { resolve(get.object_); }
+
 void Resolver::visit(expr::Grouping& grouping) { resolve(grouping.expr_); }
 
 void Resolver::visit(expr::Literal& literal) {}
@@ -91,6 +114,20 @@ void Resolver::visit(expr::Logical& logical) {
   resolve(logical.right_);
 }
 
+void Resolver::visit(expr::Set& set) {
+  resolve(set.value_);
+  resolve(set.object_);
+}
+
+void Resolver::visit(expr::This& this_) {
+  if (current_class_ == ClassType::NONE) {
+    error(this_.keyword_, "Can't use 'this' outside of a class.");
+    return;
+  }
+
+  resolve_local(this_, this_.keyword_);
+}
+
 void Resolver::visit(expr::Unary& unary) { resolve(unary.right_); }
 
 void Resolver::visit(expr::Variable& variable) {
@@ -98,7 +135,7 @@ void Resolver::visit(expr::Variable& variable) {
     return;
   }
 
-  Scope& scope = scopes_.back();
+  ScopeMap& scope = scopes_.back();
   const std::string& lexeme = variable.name_.get_lexeme();
   if (auto it = scope.find(lexeme); it != scope.end() && !it->second) {
     error(variable.name_, "Can't read local variable in its own initializer.");
@@ -116,7 +153,7 @@ void Resolver::declare(const Token& name) {
     return;
   }
 
-  Scope& scope = scopes_.back();
+  ScopeMap& scope = scopes_.back();
   if (scope.find(name.get_lexeme()) != scope.end()) {
     error(name, "Already a variable with this name in this scope.");
   }
@@ -129,14 +166,14 @@ void Resolver::define(const Token& name) {
     return;
   }
 
-  Scope& scope = scopes_.back();
+  ScopeMap& scope = scopes_.back();
   scope.insert_or_assign(name.get_lexeme(), true);
 }
 
 void Resolver::resolve_local(expr::Expr& expr, const Token& name) {
   int size = static_cast<int>(scopes_.size());
   for (int i = size - 1; i >= 0; i--) {
-    const Scope& scope = scopes_[i];
+    const ScopeMap& scope = scopes_[i];
 
     if (scope.find(name.get_lexeme()) != scope.end()) {
       expr.depth_ = size - 1 - i;
@@ -150,11 +187,13 @@ void Resolver::resolve_function(const stmt::Function& function,
   FunctionType enclosing_function = current_function_;
   current_function_ = type;
   begin_scope();
+
   for (const auto& param : function.params_) {
     declare(param);
     define(param);
   }
   resolve(function.body_);
+
   end_scope();
   current_function_ = enclosing_function;
 }

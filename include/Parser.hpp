@@ -1,7 +1,5 @@
 #pragma once
 
-#include <vector>
-
 #include "Stmt.hpp"
 
 namespace lox::treewalk {
@@ -13,35 +11,37 @@ class Parser {
  public:
   Parser(std::vector<Token> tokens);
 
-  std::vector<stmt::Stmt::Ptr> parse();
+  std::vector<Scope<Stmt>> parse();
 
  private:
-  stmt::Stmt::Ptr declaration();
-  stmt::Stmt::Ptr fun_declaration(const std::string& kind);
-  stmt::Stmt::Ptr var_declaration();
-  stmt::Stmt::Ptr statement();
-  stmt::Stmt::Ptr for_statement();
-  stmt::Stmt::Ptr if_statement();
-  stmt::Stmt::Ptr print_statement();
-  stmt::Stmt::Ptr return_statement();
-  stmt::Stmt::Ptr while_statement();
-  stmt::Stmt::Ptr block_statement();
-  stmt::Stmt::Ptr expression_statement();
+  Scope<Stmt> declaration();
+  Scope<Stmt> class_declaration();
+  stmt::Function fun_declaration(const std::string& kind);
+  Scope<Stmt> fun_declaration();
+  Scope<Stmt> var_declaration();
+  Scope<Stmt> statement();
+  Scope<Stmt> for_statement();
+  Scope<Stmt> if_statement();
+  Scope<Stmt> print_statement();
+  Scope<Stmt> return_statement();
+  Scope<Stmt> while_statement();
+  Scope<Stmt> block_statement();
+  Scope<Stmt> expression_statement();
 
-  std::vector<stmt::Stmt::Ptr> block();
-  expr::Expr::Ptr finish_call(expr::Expr::Ptr callee);
+  std::vector<Scope<Stmt>> block();
+  Scope<Expr> finish_call(Scope<Expr> callee);
 
-  expr::Expr::Ptr expression();
-  expr::Expr::Ptr assignment();
-  expr::Expr::Ptr logic_or();
-  expr::Expr::Ptr logic_and();
-  expr::Expr::Ptr equality();
-  expr::Expr::Ptr comparison();
-  expr::Expr::Ptr term();
-  expr::Expr::Ptr factor();
-  expr::Expr::Ptr unary();
-  expr::Expr::Ptr call();
-  expr::Expr::Ptr primary();
+  Scope<Expr> expression();
+  Scope<Expr> assignment();
+  Scope<Expr> logic_or();
+  Scope<Expr> logic_and();
+  Scope<Expr> equality();
+  Scope<Expr> comparison();
+  Scope<Expr> term();
+  Scope<Expr> factor();
+  Scope<Expr> unary();
+  Scope<Expr> call();
+  Scope<Expr> primary();
 
   bool match(TokenType type);
   bool check(TokenType type);

@@ -1,7 +1,7 @@
 #include "AstPrinter.hpp"
 
 namespace lox::treewalk {
-std::string AstPrinter::print(const expr::Expr::Ptr& expr) {
+std::string AstPrinter::print(const Scope<Expr>& expr) {
   expr->accept(*this);
   return str_;
 }

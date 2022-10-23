@@ -5,24 +5,21 @@
 using namespace lox;
 
 int main(int argc, char* argv[]) {
+  int exit_code = 0;
+
   try {
     if (argc > 2) {
       std::cerr << "Usage: cpplox [script]";
-      return EXIT_FAILURE;
+      exit_code = 64;
     } else if (argc == 2) {
-      treewalk::run_file(argv[1]);
+      exit_code = treewalk::run_file(argv[1]);
     } else {
       treewalk::run_prompt();
     }
-
-    if (treewalk::s_had_error || treewalk::s_had_runtime_error) {
-      return EXIT_FAILURE;
-    }
-
-    return EXIT_SUCCESS;
   } catch (const std::exception& e) {
     std::cerr << e.what() << '\n';
+    exit_code = 1;
   }
 
-  return EXIT_FAILURE;
+  return exit_code;
 }
