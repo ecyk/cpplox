@@ -24,16 +24,39 @@ void Resolver::visit(stmt::Class& class_) {
   declare(class_.name_);
   define(class_.name_);
 
+  if (class_.superclass_) {
+    auto& superclass = class_.superclass_.value();
+    if (class_.name_.get_lexeme() == superclass.name_.get_lexeme()) {
+      error(superclass.name_, "A class can't inherit from itself.");
+    }
+
+    current_class_ = ClassType::SUBCLASS;
+
+    visit(superclass);
+
+    begin_scope();
+    scopes_.back().insert_or_assign("super", true);
+  }
+
   begin_scope();
 
   ScopeMap& scope = scopes_.back();
   scope.insert_or_assign("this", true);
 
   for (const auto& method : class_.methods_) {
-    resolve_function(method, FunctionType::METHOD);
+    FunctionType declaration = FunctionType::METHOD;
+    if (method.name_.get_lexeme() == "init") {
+      declaration = FunctionType::INITIALIZER;
+    }
+
+    resolve_function(method, declaration);
   }
 
   end_scope();
+
+  if (class_.superclass_) {
+    end_scope();
+  }
 
   current_class_ = enclosing_class;
 }
@@ -66,6 +89,10 @@ void Resolver::visit(stmt::Return& return_) {
   }
 
   if (return_.value_) {
+    if (current_function_ == FunctionType::INITIALIZER) {
+      error(return_.keyword_, "Can't return a value from an initializer.");
+    }
+
     resolve(return_.value_);
   }
 }
@@ -126,6 +153,16 @@ void Resolver::visit(expr::This& this_) {
   }
 
   resolve_local(this_, this_.keyword_);
+}
+
+void Resolver::visit(expr::Super& super) {
+  if (current_class_ == ClassType::NONE) {
+    error(super.keyword_, "Can't use 'super' outside of a class.");
+  } else if (current_class_ != ClassType::SUBCLASS) {
+    error(super.keyword_, "Can't use 'super' in a class with no superclass.");
+  }
+
+  resolve_local(super, super.keyword_);
 }
 
 void Resolver::visit(expr::Unary& unary) { resolve(unary.right_); }

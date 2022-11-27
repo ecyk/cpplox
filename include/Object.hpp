@@ -6,50 +6,84 @@
 #include "Common.hpp"
 
 namespace lox::treewalk {
-using Nil = std::monostate;
-using String = std::string;
-using Number = double;
-using Boolean = bool;
+namespace stmt {
+class Function;
+class Class;
+}  // namespace stmt
 
-struct Callable;
-struct Instance;
+using LoxNil = std::monostate;
+using LoxString = std::string;
+using LoxNumber = double;
+using LoxBoolean = bool;
 
-using Object = std::variant<Nil, String, Number, Boolean, Callable, Instance>;
+struct LoxCallable;
+struct LoxInstance;
 
-using Arguments = std::vector<Object>;
-using Callback = std::function<void(const Arguments&)>;
+using LoxObject = std::variant<LoxNil, LoxString, LoxNumber, LoxBoolean,
+                               Ref<LoxCallable>, Ref<LoxInstance>>;
+
+using Arguments = std::vector<LoxObject>;
+using Callback = std::function<LoxObject(const Arguments&)>;
+
+using Fields = std::unordered_map<std::string, LoxObject>;
+using Methods = std::unordered_map<std::string, LoxCallable>;
 
 class Environment;
+class Interpreter;
 
-struct Callable {
-  enum class Type { FunctionOrMethod, Class, Native };
+struct LoxCallable {
+  struct NativeFunction {};
 
-  Callable(Callback callback, size_t arity, Type type,
-           void* declaration = nullptr, Environment* closure = nullptr);
+  struct LoxFunction {
+    LoxFunction(const Ref<Environment>& closure, stmt::Function* declaration,
+                bool is_initializer)
+        : closure_{closure},
+          declaration_{declaration},
+          is_initializer_{is_initializer} {}
 
-  Callback callback;
-  size_t arity;
+    Ref<LoxCallable> bind(const LoxObject& instance,
+                          Interpreter* interpreter) const;
 
-  Type type;
+    Ref<Environment> closure_;
+    stmt::Function* declaration_;
+    bool is_initializer_;
+  };
 
-  void* declaration;
-  Environment* closure;
+  struct LoxClass {
+    LoxClass(Methods methods, stmt::Class* declaration, LoxObject* superclass)
+        : methods_{std::move(methods)},
+          declaration_{declaration},
+          superclass_{superclass} {}
+
+    [[nodiscard]] LoxCallable* find_method(const std::string& name);
+
+    Methods methods_;
+    stmt::Class* declaration_;
+    LoxObject* superclass_;
+  };
+
+  using Data = std::variant<NativeFunction, LoxFunction, LoxClass>;
+
+  LoxCallable(Callback call, size_t arity);
+  LoxCallable(size_t arity, const Ref<Environment>& closure,
+              stmt::Function* declaration, bool is_initializer,
+              Interpreter* interpreter);
+  LoxCallable(Methods methods, stmt::Class* declaration, LoxObject* superclass,
+              Interpreter* interpreter);
+
+  Callback call_;
+  size_t arity_;
+  Data data_{};
+
+  Interpreter* interpreter_{nullptr};
 };
 
-bool operator==(const Callable& left, const Callable& right);
+struct LoxInstance {
+  LoxInstance(LoxCallable* class_) : class_{class_} {}
 
-struct Instance {
-  using Fields = std::unordered_map<std::string, Object>;
-  using Methods = std::unordered_map<std::string, Callable>;
-
-  Instance(std::string_view name, const Ref<Methods>& methods);
-
-  std::string_view name;
-  Ref<Methods> methods;
-  Ref<Fields> fields;
+  Fields fields;
+  LoxCallable* class_;
 };
 
-bool operator==(const Instance& left, const Instance& right);
-
-std::string stringify(const Object& object);
+std::string stringify(const LoxObject& object);
 }  // namespace lox::treewalk

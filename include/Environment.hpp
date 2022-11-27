@@ -9,21 +9,21 @@ namespace lox::treewalk {
 class Environment {
  public:
   Environment() = default;
-  Environment(const Ref<Environment>& enclosing);
+  explicit Environment(const Ref<Environment>& enclosing);
 
-  Object& get(const Token& name);
-  Object& get_at(int distance, const Token& name);
+  LoxObject& get(const Token& name);
+  LoxObject& get_at(int distance, const Token& name);
 
-  void assign(const Token& name, const Object& value);
-  void assign_at(int distance, const Token& name, const Object& value);
-  void define(const std::string& name, const Object& value);
+  void assign(const Token& name, const LoxObject& value);
+  void assign_at(int distance, const Token& name, const LoxObject& value);
+  void define(const std::string& name, const LoxObject& value);
+
+  [[nodiscard]] const Ref<Environment>& enclosing() const { return enclosing_; }
 
  private:
   Environment& ancestor(int distance);
 
- private:
   Ref<Environment> enclosing_;
-
-  std::unordered_map<std::string, Object> values_;
+  std::unordered_map<std::string, LoxObject> values_;
 };
 }  // namespace lox::treewalk

@@ -23,7 +23,7 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
   void visit(stmt::Var& var) override;
   void visit(stmt::While& while_) override;
 
-  Object& evaluate(const Scope<Expr>& expr);
+  LoxObject& evaluate(const Scope<Expr>& expr);
   void visit(expr::Assign& assign) override;
   void visit(expr::Binary& binary) override;
   void visit(expr::Call& call) override;
@@ -33,25 +33,21 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
   void visit(expr::Logical& logical) override;
   void visit(expr::Set& set) override;
   void visit(expr::This& this_) override;
+  void visit(expr::Super& super) override;
   void visit(expr::Unary& unary) override;
   void visit(expr::Variable& variable) override;
 
-  Object& look_up_variable(const Token& name, const expr::Expr& expr);
+  LoxObject& look_up_variable(const Token& name, const expr::Expr& expr);
 
-  Callable make_function(stmt::Function& function,
-                         const Ref<Environment>& closure,
-                         bool is_initializer = false);
-  Callable make_class(stmt::Class& class_);
-
-  static void check_number_operand(const Token& op, const Object& operand);
-  static void check_number_operands(const Token& op, const Object& left,
-                                    const Object& right);
-  static bool is_truthy(const Object& value);
-  static bool is_equal(const Object& left, const Object& right);
-  static bool is_equal(Number a, Number b);
+  static void check_number_operand(const Token& op, const LoxObject& operand);
+  static void check_number_operands(const Token& op, const LoxObject& left,
+                                    const LoxObject& right);
+  static bool is_truthy(const LoxObject& value);
+  static bool is_equal(const LoxObject& left, const LoxObject& right);
+  static bool is_equal(LoxNumber a, LoxNumber b);
 
  private:
-  Object return_value_{};
+  LoxObject return_value_{};
 
   bool is_returning_{false};
 

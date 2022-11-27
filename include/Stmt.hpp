@@ -1,5 +1,7 @@
 #pragma once
 
+#include <optional>
+
 #include "Expr.hpp"
 
 namespace lox::treewalk::stmt {
@@ -47,12 +49,16 @@ class Block : public Stmt {
 
 class Class : public Stmt {
  public:
-  explicit Class(Token name, std::vector<Function> methods)
-      : name_{std::move(name)}, methods_{std::move(methods)} {}
+  explicit Class(Token name, std::optional<expr::Variable> superclass,
+                 std::vector<Function> methods)
+      : name_{std::move(name)},
+        superclass_{std::move(superclass)},
+        methods_{std::move(methods)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
   Token name_;
+  std::optional<expr::Variable> superclass_;
   std::vector<Function> methods_;
 };
 

@@ -35,6 +35,13 @@ Scope<Stmt> Parser::declaration() {
 
 Scope<Stmt> Parser::class_declaration() {
   Token name = consume(TokenType::IDENTIFIER, "Expect class name.");
+
+  std::optional<expr::Variable> superclass;
+  if (match(TokenType::LESS)) {
+    consume(TokenType::IDENTIFIER, "Expect superclass name.");
+    superclass = expr::Variable{previous()};
+  }
+
   consume(TokenType::LEFT_BRACE, "Expect '{' before class body.");
 
   std::vector<stmt::Function> methods;
@@ -44,7 +51,7 @@ Scope<Stmt> Parser::class_declaration() {
 
   consume(TokenType::RIGHT_BRACE, "Expect '}' after class body.");
 
-  return std::make_unique<stmt::Class>(name, std::move(methods));
+  return std::make_unique<stmt::Class>(name, superclass, std::move(methods));
 }
 
 stmt::Function Parser::fun_declaration(const std::string& kind) {
@@ -375,7 +382,7 @@ Scope<Expr> Parser::primary() {
     return std::make_unique<expr::Literal>(true);
   }
   if (match(TokenType::NIL)) {
-    return std::make_unique<expr::Literal>(Nil{});
+    return std::make_unique<expr::Literal>(LoxNil{});
   }
 
   if (match(TokenType::NUMBER)) {
@@ -389,6 +396,14 @@ Scope<Expr> Parser::primary() {
     value.pop_back();
     value.erase(value.begin());
     return std::make_unique<expr::Literal>(std::move(value));
+  }
+
+  if (match(TokenType::SUPER)) {
+    Token& keyword = previous();
+    consume(TokenType::DOT, "Expect '.' after 'super'.");
+    Token& method =
+        consume(TokenType::IDENTIFIER, "Expect superclass method name.");
+    return std::make_unique<expr::Super>(keyword, method);
   }
 
   if (match(TokenType::THIS)) {

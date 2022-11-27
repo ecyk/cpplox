@@ -33,6 +33,7 @@ class Resolver : public expr::Visitor, public stmt::Visitor {
   void visit(expr::Logical& logical) override;
   void visit(expr::Set& set) override;
   void visit(expr::This& this_) override;
+  void visit(expr::Super& super) override;
   void visit(expr::Unary& unary) override;
   void visit(expr::Variable& variable) override;
 
@@ -44,14 +45,14 @@ class Resolver : public expr::Visitor, public stmt::Visitor {
 
   void resolve_local(expr::Expr& expr, const Token& name);
 
-  enum class FunctionType { NONE, FUNCTION, METHOD };
+  enum class FunctionType { NONE, FUNCTION, INITIALIZER, METHOD };
   void resolve_function(const stmt::Function& function, FunctionType type);
 
  private:
   std::vector<ScopeMap> scopes_;
   FunctionType current_function_{FunctionType::NONE};
 
-  enum class ClassType { NONE, CLASS };
+  enum class ClassType { NONE, CLASS, SUBCLASS };
   ClassType current_class_{ClassType::NONE};
 };
 }  // namespace lox::treewalk

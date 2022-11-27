@@ -13,6 +13,7 @@ class Literal;
 class Logical;
 class Set;
 class This;
+class Super;
 class Unary;
 class Variable;
 
@@ -29,6 +30,7 @@ class Visitor {
   virtual void visit(Logical& logical) = 0;
   virtual void visit(Set& set) = 0;
   virtual void visit(This& this_) = 0;
+  virtual void visit(Super& super) = 0;
   virtual void visit(Unary& unary) = 0;
   virtual void visit(Variable& variable) = 0;
 };
@@ -39,7 +41,6 @@ class Expr {
 
   virtual void accept(Visitor& visitor) = 0;
 
- public:
   int depth_{-1};
 };
 
@@ -102,11 +103,11 @@ class Grouping : public Expr {
 
 class Literal : public Expr {
  public:
-  explicit Literal(Object value) : value_{std::move(value)} {}
+  explicit Literal(LoxObject value) : value_{std::move(value)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Object value_;
+  LoxObject value_;
 };
 
 class Logical : public Expr {
@@ -142,6 +143,17 @@ class This : public Expr {
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
   Token keyword_;
+};
+
+class Super : public Expr {
+ public:
+  Super(Token keyword, Token method)
+      : keyword_{std::move(keyword)}, method_{std::move(method)} {}
+
+  void accept(Visitor& visitor) override { visitor.visit(*this); }
+
+  Token keyword_;
+  Token method_;
 };
 
 class Unary : public Expr {

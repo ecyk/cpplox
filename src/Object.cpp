@@ -1,69 +1,127 @@
 #include "Object.hpp"
 
+#include "Interpreter.hpp"
 #include "RuntimeError.hpp"
-#include "Stmt.hpp"
 
 namespace lox::treewalk {
-Callable::Callable(Callback callback, size_t arity, Type type,
-                   void* declaration, Environment* closure)
-    : callback{std::move(callback)},
-      arity{arity},
-      type{type},
-      declaration{declaration},
-      closure{closure} {}
 
-bool operator==(const Callable& left, const Callable& right) {
-  return left.type == right.type && left.declaration == right.declaration &&
-         left.closure == right.closure;
+Ref<LoxCallable> LoxCallable::LoxFunction::bind(
+    const LoxObject& instance, Interpreter* interpreter) const {
+  auto closure = std::make_shared<Environment>(closure_);
+  closure->define("this", instance);
+  return std::make_shared<LoxCallable>(declaration_->params_.size(), closure,
+                                       declaration_, is_initializer_,
+                                       interpreter);
 }
 
-Instance::Instance(std::string_view name, const Ref<Methods>& methods)
-    : name{name}, methods{methods}, fields{std::make_shared<Fields>()} {}
+LoxCallable* LoxCallable::LoxClass::find_method(const std::string& name) {
+  if (auto it = methods_.find(name); it != methods_.end()) {
+    return &it->second;
+  }
 
-bool operator==(const Instance& left, const Instance& right) {
-  return left.name == right.name && left.fields == right.fields;
+  if (superclass_ != nullptr) {
+    auto& callable = as<Ref<LoxCallable>>(*superclass_);
+    return as<LoxCallable::LoxClass>(callable->data_).find_method(name);
+  }
+
+  return nullptr;
 }
 
-std::string stringify(const Object& object) {
-  if (is<Nil>(object)) {
+LoxCallable::LoxCallable(Callback call, size_t arity)
+    : call_{std::move(call)}, arity_{arity} {}
+
+LoxCallable::LoxCallable(size_t arity, const Ref<Environment>& closure,
+                         stmt::Function* declaration, bool is_initializer,
+                         Interpreter* interpreter)
+    : call_{[this](const Arguments& arguments) {
+        const auto& data = as<LoxFunction>(data_);
+
+        auto environment = std::make_shared<Environment>(data.closure_);
+
+        const stmt::Function& function = *data.declaration_;
+        for (size_t i = 0; i < function.params_.size(); i++) {
+          environment->define(function.params_[i].get_lexeme(), arguments[i]);
+        }
+
+        // try {
+        interpreter_->execute_block(function.body_, environment);
+        // } catch (const Return& return_value) {
+        //   return return_value.value_;
+        // }
+
+        if (data.is_initializer_) {
+          return data.closure_->get_at(0, Token{TokenType::THIS, "this", 0});
+        }
+
+        return LoxObject{};
+      }},
+      arity_{arity},
+      data_{LoxFunction{closure, declaration, is_initializer}},
+      interpreter_{interpreter} {}
+
+LoxCallable::LoxCallable(Methods methods, stmt::Class* declaration,
+                         LoxObject* superclass, Interpreter* interpreter)
+    : call_{[this](const Arguments& arguments) {
+        auto& data = as<LoxClass>(data_);
+
+        auto instance = std::make_shared<LoxInstance>(this);
+
+        if (auto* initializer = data.find_method("init");
+            initializer != nullptr) {
+          as<LoxFunction>(initializer->data_)
+              .bind(instance, interpreter_)
+              ->call_(arguments);
+        }
+
+        return instance;
+      }},
+      arity_{0},
+      data_{LoxClass{std::move(methods), declaration, superclass}},
+      interpreter_{interpreter} {
+  auto& data = as<LoxClass>(data_);
+  if (auto* initializer = data.find_method("init"); initializer != nullptr) {
+    arity_ = initializer->arity_;
+  }
+}
+
+std::string stringify(const LoxObject& object) {
+  if (is<LoxNil>(object)) {
     return "nil";
   }
-  if (is<String>(object)) {
-    return as<String>(object);
+  if (is<LoxString>(object)) {
+    return as<LoxString>(object);
   }
-  if (is<Number>(object)) {
-    double value = as<Number>(object);
+  if (is<LoxNumber>(object)) {
+    std::string number = std::to_string(as<LoxNumber>(object));
+    number.erase(number.find_last_not_of('0') + 1, std::string::npos);
+    number.erase(number.find_last_not_of('.') + 1, std::string::npos);
+    return number;
+  }
+  if (is<LoxBoolean>(object)) {
+    return as<LoxBoolean>(object) ? "true" : "false";
+  }
+  if (is<Ref<LoxCallable>>(object)) {
+    const auto& callable = as<Ref<LoxCallable>>(object);
 
-    std::string str = std::to_string(value);
-    str.erase(str.find_last_not_of('0') + 1, std::string::npos);
-    str.erase(str.find_last_not_of('.') + 1, std::string::npos);
-    return str;
-  }
-  if (is<Boolean>(object)) {
-    bool value = as<Boolean>(object);
-    return value ? "true" : "false";
-  }
-  if (is<Callable>(object)) {
-    const auto& callable = as<Callable>(object);
-
-    switch (callable.type) {
-      case Callable::Type::FunctionOrMethod:
-        return "<fn " +
-               static_cast<stmt::Function*>(callable.declaration)
-                   ->name_.get_lexeme() +
-               ">";
-      case Callable::Type::Class:
-        return static_cast<stmt::Class*>(callable.declaration)
-            ->name_.get_lexeme();
-      case Callable::Type::Native:
-        return "<native fn>";
-      default:
-        return "";
+    if (is<LoxCallable::NativeFunction>(callable->data_)) {
+      return "<native fn>";
+    }
+    if (is<LoxCallable::LoxFunction>(callable->data_)) {
+      return "<fn " +
+             as<LoxCallable::LoxFunction>(callable->data_)
+                 .declaration_->name_.get_lexeme() +
+             ">";
+    }
+    if (is<LoxCallable::LoxClass>(callable->data_)) {
+      return as<LoxCallable::LoxClass>(callable->data_)
+          .declaration_->name_.get_lexeme();
     }
   }
-  if (is<Instance>(object)) {
-    const auto& value = as<Instance>(object);
-    return std::string{value.name} + " instance";
+  if (is<Ref<LoxInstance>>(object)) {
+    return as<LoxCallable::LoxClass>(
+               as<Ref<LoxInstance>>(object)->class_->data_)
+               .declaration_->name_.get_lexeme() +
+           " instance";
   }
 
   return "";
