@@ -3,7 +3,7 @@
 #include <stdexcept>
 #include <utility>
 
-#include "Token.hpp"
+#include "token.hpp"
 
 namespace lox::treewalk {
 class RuntimeError : public std::runtime_error {

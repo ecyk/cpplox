@@ -1,4 +1,4 @@
-#include "AstPrinter.hpp"
+#include "ast_printer.hpp"
 
 namespace lox::treewalk {
 std::string AstPrinter::print(const Scope<Expr>& expr) {
@@ -23,7 +23,7 @@ void AstPrinter::visit(expr::Grouping& grouping) {
 }
 
 void AstPrinter::visit(expr::Literal& literal) {
-  str_ += stringify(literal.value_);
+  str_ += literal.value_.stringify();
 }
 
 void AstPrinter::visit(expr::Unary& unary) {

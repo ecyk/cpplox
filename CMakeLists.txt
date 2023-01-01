@@ -3,16 +3,16 @@ cmake_minimum_required(VERSION 3.10)
 project(cpplox LANGUAGES CXX)
 
 set(SOURCES
-    src/AstPrinter.cpp
-    src/Environment.cpp
-    src/Interpreter.cpp
-    src/Lox.cpp
-    src/Main.cpp
-    src/Object.cpp
-    src/Parser.cpp
-    src/Resolver.cpp
-    src/Scanner.cpp
-    src/Token.cpp
+    src/ast_printer.cpp
+    src/environment.cpp
+    src/interpreter.cpp
+    src/lox.cpp
+    src/main.cpp
+    src/object.cpp
+    src/parser.cpp
+    src/resolver.cpp
+    src/scanner.cpp
+    src/token.cpp
 )
 
 add_executable(cpplox ${SOURCES})
@@ -24,5 +24,5 @@ set_target_properties(cpplox PROPERTIES
 
 target_include_directories(cpplox
     PRIVATE
-        ${PROJECT_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/include
 )

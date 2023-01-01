@@ -2,7 +2,7 @@
 
 #include <unordered_map>
 
-#include "Stmt.hpp"
+#include "stmt.hpp"
 
 namespace lox::treewalk {
 class Resolver : public expr::Visitor, public stmt::Visitor {

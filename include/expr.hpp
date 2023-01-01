@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Object.hpp"
-#include "Token.hpp"
+#include "object.hpp"
+#include "token.hpp"
 
 namespace lox::treewalk::expr {
 class Assign;
@@ -103,11 +103,11 @@ class Grouping : public Expr {
 
 class Literal : public Expr {
  public:
-  explicit Literal(LoxObject value) : value_{std::move(value)} {}
+  explicit Literal(Object value) : value_{std::move(value)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  LoxObject value_;
+  Object value_;
 };
 
 class Logical : public Expr {

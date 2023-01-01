@@ -1,13 +1,13 @@
-#include "Lox.hpp"
+#include "lox.hpp"
 
 #include <fstream>
 #include <iostream>
 
-#include "AstPrinter.hpp"
-#include "Interpreter.hpp"
-#include "Parser.hpp"
-#include "Resolver.hpp"
-#include "Scanner.hpp"
+#include "ast_printer.hpp"
+#include "interpreter.hpp"
+#include "parser.hpp"
+#include "resolver.hpp"
+#include "scanner.hpp"
 
 namespace lox::treewalk {
 static bool s_had_error{false};
@@ -22,7 +22,7 @@ static void run(const std::string& source) {
   // }
 
   Parser parser{std::move(tokens)};
-  std::vector<Scope<Stmt>> statements = parser.parse();
+  const std::vector<Scope<Stmt>> statements = parser.parse();
 
   if (s_had_error) {
     return;
@@ -45,8 +45,8 @@ static void run(const std::string& source) {
 int run_file(const std::string& path) {
   std::ifstream file_stream{path};
   file_stream.exceptions(std::ifstream::badbit | std::ifstream::failbit);
-  std::string source{std::istreambuf_iterator<char>{file_stream},
-                     std::istreambuf_iterator<char>{}};
+  const std::string source{std::istreambuf_iterator<char>{file_stream},
+                           std::istreambuf_iterator<char>{}};
 
   run(source);
 

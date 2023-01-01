@@ -2,7 +2,7 @@
 
 #include <optional>
 
-#include "Expr.hpp"
+#include "expr.hpp"
 
 namespace lox::treewalk::stmt {
 class Block;

@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "Lox.hpp"
+#include "lox.hpp"
 
 using namespace lox;
 

@@ -1,26 +1,27 @@
-#include "Interpreter.hpp"
+#include "interpreter.hpp"
 
 #include <chrono>
 #include <iostream>
 
-#include "Lox.hpp"
+#include "lox.hpp"
 
 namespace lox::treewalk {
+class Clock : public Function {
+ public:
+  Object call(const std::vector<Object>& /*arguments*/) override {
+    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                  std::chrono::system_clock::now().time_since_epoch())
+                  .count();
+
+    constexpr double ms_to_seconds = 1.0 / 1000;
+    return Object{static_cast<double>(ms) * ms_to_seconds};
+  }
+};
+
 Interpreter::Interpreter()
     : environment_{std::make_shared<Environment>()},
       globals_{environment_.get()} {
-  environment_->define(
-      "clock",
-      std::make_shared<LoxCallable>(
-          [](const Arguments&) {
-            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                          std::chrono::system_clock::now().time_since_epoch())
-                          .count();
-
-            constexpr double ms_to_seconds = 1.0 / 1000;
-            return LoxObject{static_cast<double>(ms) * ms_to_seconds};
-          },
-          0));
+  environment_->define("clock", Object{std::make_shared<Clock>()});
 }
 
 void Interpreter::interpret(const std::vector<Scope<Stmt>>& statements) {
@@ -50,7 +51,6 @@ void Interpreter::execute_block(const std::vector<Scope<Stmt>>& statements,
       break;
     }
     execute(statement);
-    // not sure
   }
   // } catch (...) {
   //   environment_ = previous;
@@ -73,40 +73,38 @@ void Interpreter::visit(stmt::Block& block) {
 }
 
 void Interpreter::visit(stmt::Class& class_) {
-  LoxObject* object = nullptr;
+  Object* superclass = nullptr;
   if (class_.superclass_) {
-    const auto& superclass = class_.superclass_.value();
-
-    object = &look_up_variable(superclass.name_, superclass);
-
-    if (!(is<Ref<LoxCallable>>(*object) &&
-          is<LoxCallable::LoxClass>(as<Ref<LoxCallable>>(*object)->data_))) {
-      throw RuntimeError(superclass.name_, "Superclass must be a class.");
+    superclass =
+        &look_up_variable(class_.superclass_->name_, *class_.superclass_);
+    if (!superclass->is<Class>()) {
+      throw RuntimeError(class_.superclass_->name_,
+                         "Superclass must be a class.");
     }
   }
 
   environment_->define(class_.name_.get_lexeme(), {});
 
-  if (object != nullptr) {
+  if (superclass != nullptr) {
     environment_ = std::make_shared<Environment>(environment_);
-    environment_->define("super", *object);
+    environment_->define("super", *superclass);
   }
 
-  Methods methods;
+  Class::Methods methods;
   for (auto& method : class_.methods_) {
-    const auto& name = method.name_.get_lexeme();
+    const auto& method_name = method.name_.get_lexeme();
     methods.insert_or_assign(
-        name, LoxCallable{method.params_.size(), environment_, &method,
-                          name == "init", this});
+        method_name,
+        Function{environment_, method_name == "init", &method, this});
   }
 
-  if (object != nullptr) {
+  if (superclass != nullptr) {
     environment_ = environment_->enclosing();
   }
 
   environment_->assign(
-      class_.name_,
-      std::make_shared<LoxCallable>(std::move(methods), &class_, object, this));
+      class_.name_, Object{std::make_shared<Class>(std::move(methods),
+                                                   superclass, &class_, this)});
 }
 
 void Interpreter::visit(stmt::Expression& expression) {
@@ -116,12 +114,11 @@ void Interpreter::visit(stmt::Expression& expression) {
 void Interpreter::visit(stmt::Function& function) {
   environment_->define(
       function.name_.get_lexeme(),
-      std::make_shared<LoxCallable>(function.params_.size(), environment_,
-                                    &function, false, this));
+      Object{std::make_shared<Function>(environment_, false, &function, this)});
 }
 
 void Interpreter::visit(stmt::If& if_) {
-  if (is_truthy(evaluate(if_.condition_))) {
+  if (evaluate(if_.condition_).is_truthy()) {
     execute(if_.then_branch_);
   } else if (if_.else_branch_) {
     execute(if_.else_branch_);
@@ -129,7 +126,7 @@ void Interpreter::visit(stmt::If& if_) {
 }
 
 void Interpreter::visit(stmt::Print& print) {
-  std::cout << stringify(evaluate(print.expr_)) << '\n';
+  std::cout << evaluate(print.expr_).stringify() << '\n';
 }
 
 void Interpreter::visit(stmt::Return& return_) {
@@ -156,7 +153,7 @@ void Interpreter::visit(stmt::Var& var) {
 
 void Interpreter::visit(stmt::While& while_) {
   while (true) {
-    if (!is_truthy(evaluate(while_.condition_))) {
+    if (!evaluate(while_.condition_).is_truthy()) {
       return;
     }
     execute(while_.body_);
@@ -166,7 +163,7 @@ void Interpreter::visit(stmt::While& while_) {
   }
 }
 
-LoxObject& Interpreter::evaluate(const Scope<Expr>& expr) {
+Object& Interpreter::evaluate(const Scope<Expr>& expr) {
   expr->accept(*this);
 
   return return_value_;
@@ -174,8 +171,7 @@ LoxObject& Interpreter::evaluate(const Scope<Expr>& expr) {
 
 void Interpreter::visit(expr::Assign& assign) {
   const auto& value = evaluate(assign.value_);
-
-  int distance = assign.depth_;
+  const int distance = assign.depth_;
   if (distance >= 0) {
     environment_->assign_at(distance, assign.name_, value);
   } else {
@@ -189,38 +185,38 @@ void Interpreter::visit(expr::Binary& binary) {
 
   switch (binary.op_.get_type()) {
     case TokenType::BANG_EQUAL:
-      return_value_ = !is_equal(left, right);
+      return_value_ = Object{!(left == right)};
       break;
     case TokenType::EQUAL_EQUAL:
-      return_value_ = is_equal(left, right);
+      return_value_ = Object{left == right};
       break;
     case TokenType::GREATER:
       check_number_operands(binary.op_, left, right);
-      return_value_ = as<LoxNumber>(left) > as<LoxNumber>(right);
+      return_value_ = Object{left.as<Number>() > right.as<Number>()};
       break;
     case TokenType::GREATER_EQUAL:
       check_number_operands(binary.op_, left, right);
-      return_value_ = as<LoxNumber>(left) >= as<LoxNumber>(right);
+      return_value_ = Object{left.as<Number>() >= right.as<Number>()};
       break;
     case TokenType::LESS:
       check_number_operands(binary.op_, left, right);
-      return_value_ = as<LoxNumber>(left) < as<LoxNumber>(right);
+      return_value_ = Object{left.as<Number>() < right.as<Number>()};
       break;
     case TokenType::LESS_EQUAL:
       check_number_operands(binary.op_, left, right);
-      return_value_ = as<LoxNumber>(left) <= as<LoxNumber>(right);
+      return_value_ = Object{left.as<Number>() <= right.as<Number>()};
       break;
     case TokenType::MINUS:
       check_number_operands(binary.op_, left, right);
-      return_value_ = as<LoxNumber>(left) - as<LoxNumber>(right);
+      return_value_ = Object{left.as<Number>() - right.as<Number>()};
       break;
     case TokenType::PLUS:
-      if (is<LoxNumber>(left) && is<LoxNumber>(right)) {
-        return_value_ = as<LoxNumber>(left) + as<LoxNumber>(right);
+      if (left.is<Number>() && right.is<Number>()) {
+        return_value_ = Object{left.as<Number>() + right.as<Number>()};
         break;
       }
-      if (is<LoxString>(left) && is<LoxString>(right)) {
-        return_value_ = as<LoxString>(left) + as<LoxString>(right);
+      if (left.is<String>() && right.is<String>()) {
+        return_value_ = Object{left.as<String>() + right.as<String>()};
         break;
       }
 
@@ -229,11 +225,11 @@ void Interpreter::visit(expr::Binary& binary) {
       break;
     case TokenType::SLASH:
       check_number_operands(binary.op_, left, right);
-      return_value_ = as<LoxNumber>(left) / as<LoxNumber>(right);
+      return_value_ = Object{left.as<Number>() / right.as<Number>()};
       break;
     case TokenType::STAR:
       check_number_operands(binary.op_, left, right);
-      return_value_ = as<LoxNumber>(left) * as<LoxNumber>(right);
+      return_value_ = Object{left.as<Number>() * right.as<Number>()};
       break;
     default:
       return_value_ = {};
@@ -244,48 +240,49 @@ void Interpreter::visit(expr::Binary& binary) {
 void Interpreter::visit(expr::Call& call) {
   auto callee = evaluate(call.callee_);
 
-  std::vector<LoxObject> arguments;
+  std::vector<Object> arguments;
+  arguments.reserve(call.arguments_.size());
   for (const auto& argument : call.arguments_) {
     arguments.push_back(evaluate(argument));
   }
 
-  if (!is<Ref<LoxCallable>>(callee)) {
+  if (!(callee.is<Function>() || callee.is<Class>())) {
     throw RuntimeError(call.paren_, "Can only call functions and classes.");
   }
 
-  const auto& callable = as<Ref<LoxCallable>>(callee);
+  const int arity = callee.is<Function>() ? callee.as<Function>().arity()
+                                          : callee.as<Class>().arity();
 
-  if (arguments.size() != callable->arity_) {
-    throw RuntimeError(call.paren_, "Expected " +
-                                        std::to_string(callable->arity_) +
+  if (arguments.size() != arity) {
+    throw RuntimeError(call.paren_, "Expected " + std::to_string(arity) +
                                         " arguments but got " +
                                         std::to_string(arguments.size()) + ".");
   }
 
   is_returning_ = false;
-  const auto& value = callable->call_(arguments);
-  if (!is<LoxNil>(value)) {
+  if (auto value = callee.is<Function>() ? callee.as<Function>().call(arguments)
+                                         : callee.as<Class>().call(arguments);
+      !value.is<Nil>()) {
     return_value_ = value;
   }
   is_returning_ = false;
 }
 
 void Interpreter::visit(expr::Get& get) {
-  auto& object = evaluate(get.object_);
-  if (is<Ref<LoxInstance>>(object)) {
-    auto& instance = as<Ref<LoxInstance>>(object);
+  const auto& object = evaluate(get.object_);
+  if (object.is<Instance>()) {
+    const auto& instance = object.as<Instance>();
 
-    if (auto it = instance->fields.find(get.name_.get_lexeme());
-        it != instance->fields.end()) {
+    if (auto it = instance.fields_.find(get.name_.get_lexeme());
+        it != instance.fields_.end()) {
       return_value_ = it->second;
       return;
     }
 
-    if (LoxCallable* method = as<LoxCallable::LoxClass>(instance->class_->data_)
-                                  .find_method(get.name_.get_lexeme());
+    if (const Function* method =
+            instance.class_->find_method(get.name_.get_lexeme());
         method != nullptr) {
-      return_value_ =
-          as<LoxCallable::LoxFunction>(method->data_).bind(instance, this);
+      return_value_ = Object{method->bind(object, this)};
       return;
     }
 
@@ -306,11 +303,11 @@ void Interpreter::visit(expr::Logical& logical) {
   const auto& left = evaluate(logical.left_);
 
   if (logical.op_.get_type() == TokenType::OR) {
-    if (is_truthy(left)) {
+    if (left.is_truthy()) {
       return;
     }
   } else {
-    if (!is_truthy(left)) {
+    if (!left.is_truthy()) {
       return;
     }
   }
@@ -321,13 +318,12 @@ void Interpreter::visit(expr::Logical& logical) {
 void Interpreter::visit(expr::Set& set) {
   auto object = evaluate(set.object_);
 
-  if (!is<Ref<LoxInstance>>(object)) {
+  if (!object.is<Instance>()) {
     throw RuntimeError(set.name_, "Only instances have fields.");
   }
 
-  const auto& value = evaluate(set.value_);
-  const auto& instance = as<Ref<LoxInstance>>(object);
-  instance->fields.insert_or_assign(set.name_.get_lexeme(), value);
+  object.as<Instance>().fields_.insert_or_assign(set.name_.get_lexeme(),
+                                                 evaluate(set.value_));
 }
 
 void Interpreter::visit(expr::This& this_) {
@@ -335,24 +331,20 @@ void Interpreter::visit(expr::This& this_) {
 }
 
 void Interpreter::visit(expr::Super& super) {
-  int distance = super.depth_;
-
-  const auto& superclass =
-      environment_->get_at(distance, Token{TokenType::SUPER, "super", 0});
-  const auto& object =
-      environment_->get_at(distance - 1, Token{TokenType::THIS, "this", 0});
-
-  const auto& callable = as<Ref<LoxCallable>>(superclass);
-  const auto& method = as<LoxCallable::LoxClass>(callable->data_)
-                           .find_method(super.method_.get_lexeme());
+  const Function* method =
+      environment_->get_at(super.depth_, Token{TokenType::SUPER, "super", 0})
+          .as<Class>()
+          .find_method(super.method_.get_lexeme());
 
   if (method == nullptr) {
     throw RuntimeError(super.method_, "Undefined property '" +
                                           super.method_.get_lexeme() + "'.");
   }
 
-  return_value_ =
-      as<LoxCallable::LoxFunction>(method->data_).bind(object, this);
+  const auto& object =
+      environment_->get_at(super.depth_ - 1, Token{TokenType::THIS, "this", 0});
+
+  return_value_ = Object{method->bind(object, this)};
 }
 
 void Interpreter::visit(expr::Unary& unary) {
@@ -360,11 +352,11 @@ void Interpreter::visit(expr::Unary& unary) {
 
   switch (unary.op_.get_type()) {
     case TokenType::BANG:
-      return_value_ = !is_truthy(right);
+      return_value_ = Object{!right.is_truthy()};
       break;
     case TokenType::MINUS:
       check_number_operand(unary.op_, right);
-      return_value_ = -as<LoxNumber>(right);
+      return_value_ = Object{-right.as<Number>()};
       break;
     default:
       return_value_ = {};
@@ -376,9 +368,9 @@ void Interpreter::visit(expr::Variable& variable) {
   return_value_ = look_up_variable(variable.name_, variable);
 }
 
-LoxObject& Interpreter::look_up_variable(const Token& name,
-                                         const expr::Expr& expr) {
-  int distance = expr.depth_;
+Object& Interpreter::look_up_variable(const Token& name,
+                                      const expr::Expr& expr) {
+  const int distance = expr.depth_;
   if (distance >= 0) {
     return environment_->get_at(distance, name);
   }
@@ -386,45 +378,20 @@ LoxObject& Interpreter::look_up_variable(const Token& name,
   return globals_->get(name);
 }
 
-void Interpreter::check_number_operand(const Token& op,
-                                       const LoxObject& operand) {
-  if (is<LoxNumber>(operand)) {
+void Interpreter::check_number_operand(const Token& op, const Object& operand) {
+  if (operand.is<Number>()) {
     return;
   }
 
   throw RuntimeError(op, "Operand must be a number.");
 }
 
-void Interpreter::check_number_operands(const Token& op, const LoxObject& left,
-                                        const LoxObject& right) {
-  if (is<LoxNumber>(left) && is<LoxNumber>(right)) {
+void Interpreter::check_number_operands(const Token& op, const Object& left,
+                                        const Object& right) {
+  if (left.is<Number>() && right.is<Number>()) {
     return;
   }
 
   throw RuntimeError(op, "Operands must be numbers.");
-}
-
-bool Interpreter::is_truthy(const LoxObject& value) {
-  if (is<LoxNil>(value)) {
-    return false;
-  }
-  if (is<LoxBoolean>(value)) {
-    return as<LoxBoolean>(value);
-  }
-
-  return true;
-}
-
-bool Interpreter::is_equal(const LoxObject& left, const LoxObject& right) {
-  if (is<LoxNumber>(left) && is<LoxNumber>(right)) {
-    return is_equal(as<LoxNumber>(left), as<LoxNumber>(right));
-  }
-
-  return left == right;
-}
-
-bool Interpreter::is_equal(LoxNumber a, LoxNumber b) {
-  return std::abs(a - b) <= std::max(std::abs(a), std::abs(b)) *
-                                std::numeric_limits<LoxNumber>::epsilon();
 }
 }  // namespace lox::treewalk

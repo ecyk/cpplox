@@ -3,7 +3,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "Token.hpp"
+#include "token.hpp"
 
 namespace lox::treewalk {
 class Scanner {

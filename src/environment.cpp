@@ -1,12 +1,12 @@
-#include "Environment.hpp"
+#include "environment.hpp"
 
-#include "RuntimeError.hpp"
+#include "runtime_error.hpp"
 
 namespace lox::treewalk {
 Environment::Environment(const Ref<Environment>& enclosing)
     : enclosing_{enclosing} {}
 
-LoxObject& Environment::get(const Token& name) {
+Object& Environment::get(const Token& name) {
   if (auto it = values_.find(name.get_lexeme()); it != values_.end()) {
     return it->second;
   }
@@ -18,11 +18,11 @@ LoxObject& Environment::get(const Token& name) {
   throw RuntimeError(name, "Undefined variable '" + name.get_lexeme() + "'.");
 }
 
-LoxObject& Environment::get_at(int distance, const Token& name) {
+Object& Environment::get_at(int distance, const Token& name) {
   return ancestor(distance).get(name);
 }
 
-void Environment::assign(const Token& name, const LoxObject& value) {
+void Environment::assign(const Token& name, const Object& value) {
   if (auto it = values_.find(name.get_lexeme()); it != values_.end()) {
     it->second = value;
     return;
@@ -36,11 +36,11 @@ void Environment::assign(const Token& name, const LoxObject& value) {
 }
 
 void Environment::assign_at(int distance, const Token& name,
-                            const LoxObject& value) {
+                            const Object& value) {
   ancestor(distance).assign(name, value);
 }
 
-void Environment::define(const std::string& name, const LoxObject& value) {
+void Environment::define(const std::string& name, const Object& value) {
   values_.insert_or_assign(name, value);
 }
 

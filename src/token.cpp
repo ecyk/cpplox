@@ -1,4 +1,4 @@
-#include "Token.hpp"
+#include "token.hpp"
 
 namespace lox::treewalk {
 Token::Token(TokenType token_type, std::string lexeme, size_t line)

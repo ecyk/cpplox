@@ -1,6 +1,6 @@
-#include "Parser.hpp"
+#include "parser.hpp"
 
-#include "Lox.hpp"
+#include "lox.hpp"
 
 namespace lox::treewalk {
 Parser::Parser(std::vector<Token> tokens) : tokens_{std::move(tokens)} {}
@@ -34,7 +34,7 @@ Scope<Stmt> Parser::declaration() {
 }
 
 Scope<Stmt> Parser::class_declaration() {
-  Token name = consume(TokenType::IDENTIFIER, "Expect class name.");
+  const Token name = consume(TokenType::IDENTIFIER, "Expect class name.");
 
   std::optional<expr::Variable> superclass;
   if (match(TokenType::LESS)) {
@@ -55,7 +55,8 @@ Scope<Stmt> Parser::class_declaration() {
 }
 
 stmt::Function Parser::fun_declaration(const std::string& kind) {
-  Token& name = consume(TokenType::IDENTIFIER, "Expect " + kind + " name.");
+  const Token& name =
+      consume(TokenType::IDENTIFIER, "Expect " + kind + " name.");
   consume(TokenType::LEFT_PAREN, "Expect '(' after " + kind + " name.");
   std::vector<Token> parameters;
   if (!check(TokenType::RIGHT_PAREN)) {
@@ -81,7 +82,7 @@ Scope<Stmt> Parser::fun_declaration() {
 }
 
 Scope<Stmt> Parser::var_declaration() {
-  Token& name = consume(TokenType::IDENTIFIER, "Expect variable name.");
+  const Token& name = consume(TokenType::IDENTIFIER, "Expect variable name.");
 
   Scope<Expr> initializer;
   if (match(TokenType::EQUAL)) {
@@ -147,7 +148,7 @@ Scope<Stmt> Parser::for_statement() {
   }
 
   if (!condition) {
-    condition = std::make_unique<expr::Literal>(true);
+    condition = std::make_unique<expr::Literal>(Object{true});
   }
   body = std::make_unique<stmt::While>(std::move(condition), std::move(body));
 
@@ -183,7 +184,7 @@ Scope<Stmt> Parser::print_statement() {
 }
 
 Scope<Stmt> Parser::return_statement() {
-  Token& keyword = previous();
+  const Token& keyword = previous();
   Scope<Expr> value;
   if (!check(TokenType::SEMICOLON)) {
     value = expression();
@@ -235,7 +236,8 @@ Scope<Expr> Parser::finish_call(Scope<Expr> callee) {
     } while (match(TokenType::COMMA));
   }
 
-  Token& paren = consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments.");
+  const Token& paren =
+      consume(TokenType::RIGHT_PAREN, "Expect ')' after arguments.");
 
   return std::make_unique<expr::Call>(std::move(callee), paren,
                                       std::move(arguments));
@@ -247,16 +249,16 @@ Scope<Expr> Parser::assignment() {
   auto expr = logic_or();
 
   if (match(TokenType::EQUAL)) {
-    Token& equals = previous();
+    const Token& equals = previous();
     auto value = assignment();
 
     if (auto* expr_ptr = dynamic_cast<expr::Variable*>(expr.get());
         expr_ptr != nullptr) {
-      Token& name = expr_ptr->name_;
+      const Token& name = expr_ptr->name_;
       return std::make_unique<expr::Assign>(name, std::move(value));
     } else if (auto* expr_ptr = dynamic_cast<expr::Get*>(expr.get());
                expr_ptr != nullptr) {
-      Token& name = expr_ptr->name_;
+      const Token& name = expr_ptr->name_;
       return std::make_unique<expr::Set>(std::move(expr_ptr->object_), name,
                                          std::move(value));
     }
@@ -271,7 +273,7 @@ Scope<Expr> Parser::logic_or() {
   auto expr = logic_and();
 
   while (match(TokenType::OR)) {
-    Token& op = previous();
+    const Token& op = previous();
     auto right = logic_and();
     expr =
         std::make_unique<expr::Logical>(std::move(expr), op, std::move(right));
@@ -284,7 +286,7 @@ Scope<Expr> Parser::logic_and() {
   auto expr = equality();
 
   while (match(TokenType::AND)) {
-    Token& op = previous();
+    const Token& op = previous();
     auto right = equality();
     expr =
         std::make_unique<expr::Logical>(std::move(expr), op, std::move(right));
@@ -297,7 +299,7 @@ Scope<Expr> Parser::equality() {
   auto expr = comparison();
 
   while (match(TokenType::BANG_EQUAL) || match(TokenType::EQUAL_EQUAL)) {
-    Token& op = previous();
+    const Token& op = previous();
     auto right = comparison();
     expr =
         std::make_unique<expr::Binary>(std::move(expr), op, std::move(right));
@@ -311,7 +313,7 @@ Scope<Expr> Parser::comparison() {
 
   while (match(TokenType::GREATER) || match(TokenType::GREATER_EQUAL) ||
          match(TokenType::LESS) || match(TokenType::LESS_EQUAL)) {
-    Token& op = previous();
+    const Token& op = previous();
     auto right = term();
     expr =
         std::make_unique<expr::Binary>(std::move(expr), op, std::move(right));
@@ -324,7 +326,7 @@ Scope<Expr> Parser::term() {
   auto expr = factor();
 
   while (match(TokenType::MINUS) || match(TokenType::PLUS)) {
-    Token& op = previous();
+    const Token& op = previous();
     auto right = factor();
     expr =
         std::make_unique<expr::Binary>(std::move(expr), op, std::move(right));
@@ -337,7 +339,7 @@ Scope<Expr> Parser::factor() {
   auto expr = unary();
 
   while (match(TokenType::SLASH) || match(TokenType::STAR)) {
-    Token& op = previous();
+    const Token& op = previous();
     auto right = unary();
     expr =
         std::make_unique<expr::Binary>(std::move(expr), op, std::move(right));
@@ -348,7 +350,7 @@ Scope<Expr> Parser::factor() {
 
 Scope<Expr> Parser::unary() {
   if (match(TokenType::BANG) || match(TokenType::MINUS)) {
-    Token& op = previous();
+    const Token& op = previous();
     auto right = unary();
     return std::make_unique<expr::Unary>(op, std::move(right));
   }
@@ -363,7 +365,7 @@ Scope<Expr> Parser::call() {
     if (match(TokenType::LEFT_PAREN)) {
       expr = finish_call(std::move(expr));
     } else if (match(TokenType::DOT)) {
-      Token& name =
+      const Token& name =
           consume(TokenType::IDENTIFIER, "Expect property name after '.'.");
       expr = std::make_unique<expr::Get>(std::move(expr), name);
     } else {
@@ -376,18 +378,18 @@ Scope<Expr> Parser::call() {
 
 Scope<Expr> Parser::primary() {
   if (match(TokenType::FALSE)) {
-    return std::make_unique<expr::Literal>(false);
+    return std::make_unique<expr::Literal>(Object{false});
   }
   if (match(TokenType::TRUE)) {
-    return std::make_unique<expr::Literal>(true);
+    return std::make_unique<expr::Literal>(Object{true});
   }
   if (match(TokenType::NIL)) {
-    return std::make_unique<expr::Literal>(LoxNil{});
+    return std::make_unique<expr::Literal>(Object{});
   }
 
   if (match(TokenType::NUMBER)) {
     double value = std::strtod(previous().get_lexeme().c_str(), nullptr);
-    return std::make_unique<expr::Literal>(value);
+    return std::make_unique<expr::Literal>(Object{value});
   }
   if (match(TokenType::STRING)) {
     std::string value = previous().get_lexeme();
@@ -395,13 +397,13 @@ Scope<Expr> Parser::primary() {
     // Trim string
     value.pop_back();
     value.erase(value.begin());
-    return std::make_unique<expr::Literal>(std::move(value));
+    return std::make_unique<expr::Literal>(Object{std::move(value)});
   }
 
   if (match(TokenType::SUPER)) {
-    Token& keyword = previous();
+    const Token& keyword = previous();
     consume(TokenType::DOT, "Expect '.' after 'super'.");
-    Token& method =
+    const Token& method =
         consume(TokenType::IDENTIFIER, "Expect superclass method name.");
     return std::make_unique<expr::Super>(keyword, method);
   }

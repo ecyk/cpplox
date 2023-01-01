@@ -1,6 +1,6 @@
-#include "Scanner.hpp"
+#include "scanner.hpp"
 
-#include "Lox.hpp"
+#include "lox.hpp"
 
 namespace lox::treewalk {
 Scanner::Scanner(std::string source) : source_{std::move(source)} {}
@@ -16,7 +16,7 @@ std::vector<Token> Scanner::scan_tokens() {
 }
 
 void Scanner::scan_token() {
-  char c = advance();
+  const char c = advance();
   switch (c) {
     case '(':
       add_token(TokenType::LEFT_PAREN);
@@ -104,7 +104,7 @@ void Scanner::comment() {
 }
 
 void Scanner::multiline_comment() {
-  size_t start_line = line_;
+  const size_t start_line = line_;
 
   // A multiline comment goes until the next "*/"
   while ((peek() != '*' || peek_next() != '/') && !is_at_end()) {
@@ -127,7 +127,7 @@ void Scanner::multiline_comment() {
 }
 
 void Scanner::string() {
-  size_t start_line = line_;
+  const size_t start_line = line_;
 
   while (peek() != '"' && !is_at_end()) {
     if (peek() == '\n') {

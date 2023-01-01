@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Environment.hpp"
-#include "Stmt.hpp"
+#include "environment.hpp"
+#include "stmt.hpp"
 
 namespace lox::treewalk {
 class Interpreter : public expr::Visitor, public stmt::Visitor {
@@ -23,7 +23,7 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
   void visit(stmt::Var& var) override;
   void visit(stmt::While& while_) override;
 
-  LoxObject& evaluate(const Scope<Expr>& expr);
+  Object& evaluate(const Scope<Expr>& expr);
   void visit(expr::Assign& assign) override;
   void visit(expr::Binary& binary) override;
   void visit(expr::Call& call) override;
@@ -37,19 +37,15 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
   void visit(expr::Unary& unary) override;
   void visit(expr::Variable& variable) override;
 
-  LoxObject& look_up_variable(const Token& name, const expr::Expr& expr);
+  Object& look_up_variable(const Token& name, const expr::Expr& expr);
 
-  static void check_number_operand(const Token& op, const LoxObject& operand);
-  static void check_number_operands(const Token& op, const LoxObject& left,
-                                    const LoxObject& right);
-  static bool is_truthy(const LoxObject& value);
-  static bool is_equal(const LoxObject& left, const LoxObject& right);
-  static bool is_equal(LoxNumber a, LoxNumber b);
+  static void check_number_operand(const Token& op, const Object& operand);
+  static void check_number_operands(const Token& op, const Object& left,
+                                    const Object& right);
 
  private:
-  LoxObject return_value_{};
-
-  bool is_returning_{false};
+  Object return_value_{};
+  bool is_returning_{};
 
   Ref<Environment> environment_;
   Environment* globals_;

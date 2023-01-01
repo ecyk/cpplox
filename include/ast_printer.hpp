@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Expr.hpp"
+#include "expr.hpp"
 
 namespace lox::treewalk {
 class AstPrinter : public expr::Visitor {

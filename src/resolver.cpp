@@ -1,6 +1,6 @@
-#include "Resolver.hpp"
+#include "resolver.hpp"
 
-#include "Lox.hpp"
+#include "lox.hpp"
 
 namespace lox::treewalk {
 void Resolver::resolve(const std::vector<Scope<Stmt>>& statements) {
@@ -18,7 +18,7 @@ void Resolver::visit(stmt::Block& block) {
 }
 
 void Resolver::visit(stmt::Class& class_) {
-  ClassType enclosing_class = current_class_;
+  const ClassType enclosing_class = current_class_;
   current_class_ = ClassType::CLASS;
 
   declare(class_.name_);
@@ -208,7 +208,7 @@ void Resolver::define(const Token& name) {
 }
 
 void Resolver::resolve_local(expr::Expr& expr, const Token& name) {
-  int size = static_cast<int>(scopes_.size());
+  const int size = static_cast<int>(scopes_.size());
   for (int i = size - 1; i >= 0; i--) {
     const ScopeMap& scope = scopes_[i];
 
@@ -221,7 +221,7 @@ void Resolver::resolve_local(expr::Expr& expr, const Token& name) {
 
 void Resolver::resolve_function(const stmt::Function& function,
                                 FunctionType type) {
-  FunctionType enclosing_function = current_function_;
+  const FunctionType enclosing_function = current_function_;
   current_function_ = type;
   begin_scope();
 

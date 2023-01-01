@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "RuntimeError.hpp"
+#include "runtime_error.hpp"
 
 namespace lox::treewalk {
 class Token;

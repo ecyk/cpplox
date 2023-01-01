@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Stmt.hpp"
+#include "stmt.hpp"
 
 namespace lox::treewalk {
 class ParseError : public std::exception {
