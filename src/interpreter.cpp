@@ -47,9 +47,6 @@ void Interpreter::execute_block(const std::vector<Scope<Stmt>>& statements,
   environment_ = environment;
 
   for (const auto& statement : statements) {
-    if (is_returning_) {
-      break;
-    }
     execute(statement);
   }
   // } catch (...) {
@@ -130,14 +127,13 @@ void Interpreter::visit(stmt::Print& print) {
 }
 
 void Interpreter::visit(stmt::Return& return_) {
-  is_returning_ = true;
-
   if (return_.value_) {
     evaluate(return_.value_);
   } else {
     return_value_ = {};
   }
 
+  is_returning_ = true;
   // throw Return(value);
 }
 
@@ -152,14 +148,11 @@ void Interpreter::visit(stmt::Var& var) {
 }
 
 void Interpreter::visit(stmt::While& while_) {
-  while (true) {
+  while (!is_returning_) {
     if (!evaluate(while_.condition_).is_truthy()) {
       return;
     }
     execute(while_.body_);
-    if (is_returning_) {
-      break;
-    }
   }
 }
 
@@ -259,12 +252,12 @@ void Interpreter::visit(expr::Call& call) {
                                         std::to_string(arguments.size()) + ".");
   }
 
-  is_returning_ = false;
-  if (auto value = callee.is<Function>() ? callee.as<Function>().call(arguments)
-                                         : callee.as<Class>().call(arguments);
-      !value.is<Nil>()) {
-    return_value_ = value;
+  auto value = callee.is<Function>() ? callee.as<Function>().call(arguments)
+                                     : callee.as<Class>().call(arguments);
+  if (!is_returning_ || !value.is<Nil>()) {
+    return_value_ = std::move(value);
   }
+
   is_returning_ = false;
 }
 
