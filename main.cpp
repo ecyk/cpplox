@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "lox.hpp"
+#include "treewalk.hpp"
 
 using namespace lox;
 

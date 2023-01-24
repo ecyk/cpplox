@@ -1,6 +1,6 @@
 #include "parser.hpp"
 
-#include "lox.hpp"
+#include "treewalk.hpp"
 
 namespace lox::treewalk {
 Parser::Parser(std::vector<Token> tokens) : tokens_{std::move(tokens)} {}

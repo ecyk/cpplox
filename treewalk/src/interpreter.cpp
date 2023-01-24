@@ -3,7 +3,7 @@
 #include <chrono>
 #include <iostream>
 
-#include "lox.hpp"
+#include "treewalk.hpp"
 
 namespace lox::treewalk {
 class Clock : public Function {

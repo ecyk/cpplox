@@ -1,6 +1,6 @@
 #include "resolver.hpp"
 
-#include "lox.hpp"
+#include "treewalk.hpp"
 
 namespace lox::treewalk {
 void Resolver::resolve(const std::vector<Scope<Stmt>>& statements) {

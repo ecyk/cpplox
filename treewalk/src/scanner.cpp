@@ -1,6 +1,6 @@
 #include "scanner.hpp"
 
-#include "lox.hpp"
+#include "treewalk.hpp"
 
 namespace lox::treewalk {
 Scanner::Scanner(std::string source) : source_{std::move(source)} {}
