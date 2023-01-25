@@ -1,5 +1,7 @@
 #include "scanner.hpp"
 
+#include <unordered_map>
+
 #include "treewalk.hpp"
 
 namespace lox::treewalk {
@@ -104,8 +106,6 @@ void Scanner::comment() {
 }
 
 void Scanner::multiline_comment() {
-  const size_t start_line = line_;
-
   // A multiline comment goes until the next "*/"
   while ((peek() != '*' || peek_next() != '/') && !is_at_end()) {
     if (peek() == '\n') {
@@ -115,7 +115,7 @@ void Scanner::multiline_comment() {
   }
 
   if (is_at_end()) {
-    error(start_line, "Unterminated multiline comment.");
+    error(line_, "Unterminated multiline comment.");
     return;
   }
 
@@ -127,8 +127,6 @@ void Scanner::multiline_comment() {
 }
 
 void Scanner::string() {
-  const size_t start_line = line_;
-
   while (peek() != '"' && !is_at_end()) {
     if (peek() == '\n') {
       ++line_;
@@ -137,7 +135,7 @@ void Scanner::string() {
   }
 
   if (is_at_end()) {
-    error(start_line, "Unterminated string.");
+    error(line_, "Unterminated string.");
     return;
   }
 
