@@ -8,8 +8,12 @@
 
 namespace lox::bytecode {
 static InterpretResult run(const std::string& source) {
-  Compiler compiler;
-  compiler.compile(source);
+  Chunk chunk;
+
+  Compiler compiler{source};
+  if (!compiler.compile(chunk)) {
+    return INTERPRET_COMPILE_ERROR;
+  }
 
   return INTERPRET_OK;
 }

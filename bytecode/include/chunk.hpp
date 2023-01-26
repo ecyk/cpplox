@@ -15,7 +15,7 @@ enum OpCode : uint8_t {
 
 class Chunk {
  public:
-  void write(OpCode byte, int line);
+  void write(uint8_t byte, int line);
   int add_constant(Value value);
   Value get_constant(int index) const;
 

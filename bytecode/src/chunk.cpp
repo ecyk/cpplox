@@ -4,7 +4,7 @@
 #include <iostream>
 
 namespace lox::bytecode {
-void Chunk::write(OpCode byte, int line) {
+void Chunk::write(uint8_t byte, int line) {
   code_.push_back(byte);
   lines_.push_back(line);
 }
@@ -13,6 +13,7 @@ int Chunk::add_constant(Value value) {
   constants_.push_back(value);
   return static_cast<int>(constants_.size()) - 1;
 }
+
 Value Chunk::get_constant(int index) const { return constants_[index]; }
 
 void Chunk::disassemble(const std::string& name) const {
