@@ -13,7 +13,6 @@ class AstPrinter : public expr::Visitor {
   void visit(expr::Literal& literal) override;
   void visit(expr::Unary& unary) override;
 
- private:
   std::string str_;
 };
 }  // namespace lox::treewalk

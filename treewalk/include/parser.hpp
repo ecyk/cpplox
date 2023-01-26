@@ -56,8 +56,7 @@ class Parser {
 
   void synchronize();
 
- private:
   std::vector<Token> tokens_;
-  size_t current_{0};
+  size_t current_{};
 };
 }  // namespace lox::treewalk

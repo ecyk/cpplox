@@ -43,7 +43,6 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
   static void check_number_operands(const Token& op, const Object& left,
                                     const Object& right);
 
- private:
   Object return_value_{};
   bool is_returning_{};
 

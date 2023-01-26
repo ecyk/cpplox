@@ -48,7 +48,6 @@ class Resolver : public expr::Visitor, public stmt::Visitor {
   enum class FunctionType { NONE, FUNCTION, INITIALIZER, METHOD };
   void resolve_function(const stmt::Function& function, FunctionType type);
 
- private:
   std::vector<ScopeMap> scopes_;
   FunctionType current_function_{FunctionType::NONE};
 

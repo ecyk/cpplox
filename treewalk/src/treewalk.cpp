@@ -3,15 +3,15 @@
 #include <fstream>
 #include <iostream>
 
-#include "ast_printer.hpp"
+// #include "ast_printer.hpp"
 #include "interpreter.hpp"
 #include "parser.hpp"
 #include "resolver.hpp"
 #include "scanner.hpp"
 
 namespace lox::treewalk {
-static bool s_had_error{false};
-static bool s_had_runtime_error{false};
+static bool s_had_error{};
+static bool s_had_runtime_error{};
 
 static void run(const std::string& source) {
   Scanner scanner{source};

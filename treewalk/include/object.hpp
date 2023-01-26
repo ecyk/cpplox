@@ -49,6 +49,9 @@ class Object {
     return as_impl<Object, ObjectT>(*this);
   }
 
+  Object call(const std::vector<Object>& arguments);
+  int arity() const;
+
   std::string stringify() const;
   bool is_truthy() const;
 
@@ -91,38 +94,40 @@ class Function {
            Interpreter* interpreter = nullptr);
 
   virtual Object call(const std::vector<Object>& arguments);
-  virtual int arity() const;
-  std::string name() const;
+  virtual int arity() const { return arity_; }
 
-  Ref<Function> bind(const Object& instance, Interpreter* interpreter) const;
+  Ref<Function> bind(const Object& instance) const;
+
+  std::string to_string() const;
 
  private:
   Ref<Environment> closure_;
-  bool is_initializer_{};
+  int arity_{};
+  bool is_initializer_;
 
-  stmt::Function* declaration_{};
-  Interpreter* interpreter_{};
+  stmt::Function* declaration_;
+  Interpreter* interpreter_;
 };
 
 class Class {
  public:
   using Methods = std::unordered_map<std::string, Function>;
 
-  Class(Methods methods, Object* superclass, stmt::Class* declaration,
-        Interpreter* interpreter);
+  Class(Methods methods, Object* superclass, stmt::Class* declaration);
 
   Object call(const std::vector<Object>& arguments);
-  int arity() const;
-  const std::string& name() const;
+  int arity() const { return arity_; }
 
-  [[nodiscard]] const Function* find_method(const std::string& name) const;
+  const Function* find_method(const std::string& name) const;
+
+  std::string to_string() const;
 
  private:
   Methods methods_;
   Object* superclass_;
+  int arity_{};
 
   stmt::Class* declaration_;
-  Interpreter* interpreter_;
 };
 
 class Instance {
@@ -131,8 +136,14 @@ class Instance {
 
   Instance(Class* class_) : class_{class_} {}
 
-  std::string name() const;
+  const Object* get_field(const std::string& name) const;
+  const Function* get_method(const std::string& name) const;
 
+  void set_field(const std::string& name, const Object& object);
+
+  std::string to_string() const;
+
+ private:
   Fields fields_;
   Class* class_;
 };

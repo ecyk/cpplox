@@ -89,10 +89,9 @@ void Interpreter::visit(stmt::Class& class_) {
 
   Class::Methods methods;
   for (auto& method : class_.methods_) {
-    const auto& method_name = method.name_.get_lexeme();
+    const auto& name = method.name_.get_lexeme();
     methods.insert_or_assign(
-        method_name,
-        Function{environment_, method_name == "init", &method, this});
+        name, Function{environment_, name == "init", &method, this});
   }
 
   if (superclass != nullptr) {
@@ -100,8 +99,8 @@ void Interpreter::visit(stmt::Class& class_) {
   }
 
   environment_->assign(
-      class_.name_, Object{std::make_shared<Class>(std::move(methods),
-                                                   superclass, &class_, this)});
+      class_.name_,
+      Object{std::make_shared<Class>(std::move(methods), superclass, &class_)});
 }
 
 void Interpreter::visit(stmt::Expression& expression) {
@@ -243,39 +242,32 @@ void Interpreter::visit(expr::Call& call) {
     throw RuntimeError(call.paren_, "Can only call functions and classes.");
   }
 
-  const int arity = callee.is<Function>() ? callee.as<Function>().arity()
-                                          : callee.as<Class>().arity();
-
+  const int arity = callee.arity();
   if (arguments.size() != arity) {
     throw RuntimeError(call.paren_, "Expected " + std::to_string(arity) +
                                         " arguments but got " +
                                         std::to_string(arguments.size()) + ".");
   }
 
-  auto value = callee.is<Function>() ? callee.as<Function>().call(arguments)
-                                     : callee.as<Class>().call(arguments);
+  auto value = callee.call(arguments);
   if (!is_returning_ || !value.is<Nil>()) {
-    return_value_ = std::move(value);
+    return_value_ = value;
   }
 
   is_returning_ = false;
 }
 
 void Interpreter::visit(expr::Get& get) {
-  const auto& object = evaluate(get.object_);
-  if (object.is<Instance>()) {
+  if (const auto& object = evaluate(get.object_); object.is<Instance>()) {
     const auto& instance = object.as<Instance>();
 
-    if (auto it = instance.fields_.find(get.name_.get_lexeme());
-        it != instance.fields_.end()) {
-      return_value_ = it->second;
+    if (const Object* field = instance.get_field(get.name_.get_lexeme())) {
+      return_value_ = *field;
       return;
     }
 
-    if (const Function* method =
-            instance.class_->find_method(get.name_.get_lexeme());
-        method != nullptr) {
-      return_value_ = Object{method->bind(object, this)};
+    if (const Function* method = instance.get_method(get.name_.get_lexeme())) {
+      return_value_ = Object{method->bind(object)};
       return;
     }
 
@@ -309,14 +301,13 @@ void Interpreter::visit(expr::Logical& logical) {
 }
 
 void Interpreter::visit(expr::Set& set) {
-  auto object = evaluate(set.object_);
+  auto& object = evaluate(set.object_);
 
   if (!object.is<Instance>()) {
     throw RuntimeError(set.name_, "Only instances have fields.");
   }
 
-  object.as<Instance>().fields_.insert_or_assign(set.name_.get_lexeme(),
-                                                 evaluate(set.value_));
+  object.as<Instance>().set_field(set.name_.get_lexeme(), evaluate(set.value_));
 }
 
 void Interpreter::visit(expr::This& this_) {
@@ -337,7 +328,7 @@ void Interpreter::visit(expr::Super& super) {
   const auto& object =
       environment_->get_at(super.depth_ - 1, Token{TokenType::THIS, "this", 0});
 
-  return_value_ = Object{method->bind(object, this)};
+  return_value_ = Object{method->bind(object)};
 }
 
 void Interpreter::visit(expr::Unary& unary) {

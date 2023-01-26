@@ -1,11 +1,25 @@
 #include "object.hpp"
 
-#include <utility>
-
 #include "interpreter.hpp"
 #include "runtime_error.hpp"
 
 namespace lox::treewalk {
+Object Object::call(const std::vector<Object>& arguments) {
+  if (is<Function>()) {
+    return as<Function>().call(arguments);
+  }
+
+  return as<Class>().call(arguments);
+}
+
+int Object::arity() const {
+  if (is<Function>()) {
+    return as<Function>().arity();
+  }
+
+  return as<Class>().arity();
+}
+
 std::string Object::stringify() const {
   if (is<Nil>()) {
     return "nil";
@@ -23,13 +37,13 @@ std::string Object::stringify() const {
     return as<Boolean>() ? "true" : "false";
   }
   if (is<Function>()) {
-    return as<Function>().name();
+    return as<Function>().to_string();
   }
   if (is<Class>()) {
-    return as<Class>().name();
+    return as<Class>().to_string();
   }
   if (is<Instance>()) {
-    return as<Instance>().name();
+    return as<Instance>().to_string();
   }
 
   return "";
@@ -51,7 +65,11 @@ Function::Function(const Ref<Environment>& closure, bool is_initializer,
     : closure_{closure},
       is_initializer_{is_initializer},
       declaration_{declaration},
-      interpreter_{interpreter} {}
+      interpreter_{interpreter} {
+  if (declaration_ != nullptr) {
+    arity_ = static_cast<int>(declaration_->params_.size());
+  }
+}
 
 Object Function::call(const std::vector<Object>& arguments) {
   auto environment = std::make_shared<Environment>(closure_);
@@ -73,51 +91,38 @@ Object Function::call(const std::vector<Object>& arguments) {
   return {};
 }
 
-int Function::arity() const {
-  return (declaration_ != nullptr)
-             ? static_cast<int>(declaration_->params_.size())
-             : 0;
-}
-
-std::string Function::name() const {
-  return (declaration_ != nullptr)
-             ? "<fn " + declaration_->name_.get_lexeme() + ">"
-             : "<native fn>";
-}
-
-Ref<Function> Function::bind(const Object& instance,
-                             Interpreter* interpreter) const {
+Ref<Function> Function::bind(const Object& instance) const {
   auto closure = std::make_shared<Environment>(closure_);
   closure->define("this", instance);
   return std::make_shared<Function>(closure, is_initializer_, declaration_,
-                                    interpreter);
+                                    interpreter_);
 }
 
-Class::Class(Methods methods, Object* superclass, stmt::Class* declaration,
-             Interpreter* interpreter)
+std::string Function::to_string() const {
+  if (declaration_ != nullptr) {
+    return "<fn " + declaration_->name_.get_lexeme() + ">";
+  }
+
+  return "<native fn>";
+}
+
+Class::Class(Methods methods, Object* superclass, stmt::Class* declaration)
     : methods_{std::move(methods)},
       superclass_{superclass},
-      declaration_{declaration},
-      interpreter_{interpreter} {}
+      declaration_{declaration} {
+  if (const Function* initializer = find_method("init")) {
+    arity_ = initializer->arity();
+  }
+}
 
 Object Class::call(const std::vector<Object>& arguments) {
   Object instance{std::make_shared<Instance>(this)};
 
-  if (const Function* initializer = find_method("init");
-      initializer != nullptr) {
-    initializer->bind(instance, interpreter_)->call(arguments);
+  if (const Function* initializer = find_method("init")) {
+    initializer->bind(instance)->call(arguments);
   }
 
   return instance;
-}
-
-int Class::arity() const {
-  const Function* initializer = find_method("init");
-  return (initializer != nullptr) ? initializer->arity() : 0;
-}
-
-const std::string& Class::name() const {
-  return declaration_->name_.get_lexeme();
 }
 
 const Function* Class::find_method(const std::string& name) const {
@@ -132,5 +137,31 @@ const Function* Class::find_method(const std::string& name) const {
   return nullptr;
 }
 
-std::string Instance::name() const { return class_->name() + " instance"; }
+std::string Class::to_string() const {
+  return declaration_->name_.get_lexeme();
+}
+
+const Object* Instance::get_field(const std::string& name) const {
+  if (auto it = fields_.find(name); it != fields_.end()) {
+    return &it->second;
+  }
+
+  return nullptr;
+}
+
+const Function* Instance::get_method(const std::string& name) const {
+  if (const Function* method = class_->find_method(name)) {
+    return method;
+  }
+
+  return nullptr;
+}
+
+void Instance::set_field(const std::string& name, const Object& object) {
+  fields_.insert_or_assign(name, object);
+}
+
+std::string Instance::to_string() const {
+  return class_->to_string() + " instance";
+}
 }  // namespace lox::treewalk
