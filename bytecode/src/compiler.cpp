@@ -16,31 +16,31 @@ Compiler::Compiler(const std::string& source) : scanner_{source} {
   rules_[TOKEN_SEMICOLON] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_SLASH] = {nullptr, &Compiler::binary, PREC_FACTOR};
   rules_[TOKEN_STAR] = {nullptr, &Compiler::binary, PREC_FACTOR};
-  rules_[TOKEN_BANG] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_BANG_EQUAL] = {nullptr, nullptr, PREC_NONE};
+  rules_[TOKEN_BANG] = {&Compiler::unary, nullptr, PREC_NONE};
+  rules_[TOKEN_BANG_EQUAL] = {nullptr, &Compiler::binary, PREC_EQUALITY};
   rules_[TOKEN_EQUAL] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_EQUAL_EQUAL] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_GREATER] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_GREATER_EQUAL] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_LESS] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_LESS_EQUAL] = {nullptr, nullptr, PREC_NONE};
+  rules_[TOKEN_EQUAL_EQUAL] = {nullptr, &Compiler::binary, PREC_EQUALITY};
+  rules_[TOKEN_GREATER] = {nullptr, &Compiler::binary, PREC_COMPARISON};
+  rules_[TOKEN_GREATER_EQUAL] = {nullptr, &Compiler::binary, PREC_COMPARISON};
+  rules_[TOKEN_LESS] = {nullptr, &Compiler::binary, PREC_COMPARISON};
+  rules_[TOKEN_LESS_EQUAL] = {nullptr, &Compiler::binary, PREC_COMPARISON};
   rules_[TOKEN_IDENTIFIER] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_STRING] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_NUMBER] = {&Compiler::number, nullptr, PREC_NONE};
   rules_[TOKEN_AND] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_CLASS] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_ELSE] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_FALSE] = {nullptr, nullptr, PREC_NONE};
+  rules_[TOKEN_FALSE] = {&Compiler::literal, nullptr, PREC_NONE};
   rules_[TOKEN_FOR] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_FUN] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_IF] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_NIL] = {nullptr, nullptr, PREC_NONE};
+  rules_[TOKEN_NIL] = {&Compiler::literal, nullptr, PREC_NONE};
   rules_[TOKEN_OR] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_PRINT] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_RETURN] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_SUPER] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_THIS] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_TRUE] = {nullptr, nullptr, PREC_NONE};
+  rules_[TOKEN_TRUE] = {&Compiler::literal, nullptr, PREC_NONE};
   rules_[TOKEN_VAR] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_WHILE] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_ERROR] = {nullptr, nullptr, PREC_NONE};
@@ -90,6 +90,24 @@ void Compiler::binary() {
   parse_precedence(static_cast<Precedence>(get_rule(op)->precedence + 1));
 
   switch (op) {
+    case TOKEN_BANG_EQUAL:
+      emit_bytes(OP_EQUAL, OP_NOT);
+      break;
+    case TOKEN_EQUAL_EQUAL:
+      emit_byte(OP_EQUAL);
+      break;
+    case TOKEN_GREATER:
+      emit_byte(OP_GREATER);
+      break;
+    case TOKEN_GREATER_EQUAL:
+      emit_bytes(OP_LESS, OP_NOT);
+      break;
+    case TOKEN_LESS:
+      emit_byte(OP_LESS);
+      break;
+    case TOKEN_LESS_EQUAL:
+      emit_bytes(OP_GREATER, OP_NOT);
+      break;
     case TOKEN_PLUS:
       emit_byte(OP_ADD);
       break;
@@ -112,6 +130,9 @@ void Compiler::unary() {
   parse_precedence(PREC_UNARY);
 
   switch (op) {
+    case TOKEN_BANG:
+      emit_byte(OP_NOT);
+      break;
     case TOKEN_MINUS:
       emit_byte(OP_NEGATE);
       break;
@@ -125,9 +146,25 @@ void Compiler::grouping() {
   consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
+void Compiler::literal() {
+  switch (previous_.type_) {
+    case TOKEN_FALSE:
+      emit_byte(OP_FALSE);
+      break;
+    case TOKEN_NIL:
+      emit_byte(OP_NIL);
+      break;
+    case TOKEN_TRUE:
+      emit_byte(OP_TRUE);
+      break;
+    default:
+      return;
+  }
+}
+
 void Compiler::number() {
   const double value = strtod(previous_.lexeme_.data(), nullptr);
-  emit_constant(value);
+  emit_constant(Value{value});
 }
 
 void Compiler::parse_precedence(Precedence precedence) {

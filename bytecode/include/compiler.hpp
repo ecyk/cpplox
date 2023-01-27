@@ -46,6 +46,7 @@ class Compiler {
   void binary();
   void unary();
   void grouping();
+  void literal();
   void number();
 
   ParseRule* get_rule(TokenType type) { return &rules_[type]; }

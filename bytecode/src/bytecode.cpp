@@ -15,7 +15,8 @@ static InterpretResult run(const std::string& source) {
     return INTERPRET_COMPILE_ERROR;
   }
 
-  return INTERPRET_OK;
+  VM vm;
+  return vm.interpret(chunk);
 }
 
 int run_file(const std::string& path) {
