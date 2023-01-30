@@ -3,6 +3,9 @@
 #include <iomanip>
 #include <iostream>
 
+#include "object.hpp"
+#include "vm.hpp"
+
 namespace lox::bytecode {
 Compiler::Compiler(const std::string& source) : scanner_{source} {
   rules_[TOKEN_LEFT_PAREN] = {&Compiler::grouping, nullptr, PREC_NONE};
@@ -25,7 +28,7 @@ Compiler::Compiler(const std::string& source) : scanner_{source} {
   rules_[TOKEN_LESS] = {nullptr, &Compiler::binary, PREC_COMPARISON};
   rules_[TOKEN_LESS_EQUAL] = {nullptr, &Compiler::binary, PREC_COMPARISON};
   rules_[TOKEN_IDENTIFIER] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_STRING] = {nullptr, nullptr, PREC_NONE};
+  rules_[TOKEN_STRING] = {&Compiler::string, nullptr, PREC_NONE};
   rules_[TOKEN_NUMBER] = {&Compiler::number, nullptr, PREC_NONE};
   rules_[TOKEN_AND] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_CLASS] = {nullptr, nullptr, PREC_NONE};
@@ -160,6 +163,13 @@ void Compiler::literal() {
     default:
       return;
   }
+}
+
+void Compiler::string() {
+  previous_.lexeme_.remove_prefix(1);
+  previous_.lexeme_.remove_suffix(1);
+  emit_constant(
+      Value{VM::allocate_object<ObjString>(std::string{previous_.lexeme_})});
 }
 
 void Compiler::number() {

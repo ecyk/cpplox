@@ -14,9 +14,7 @@ int Chunk::add_constant(Value value) {
   return static_cast<int>(constants_.size()) - 1;
 }
 
-Value Chunk::get_constant(int offset) const { return constants_[offset]; }
-
-void Chunk::disassemble(const std::string& name) const {
+void Chunk::disassemble(std::string_view name) const {
   std::cout << "== " << name << " ==\n";
 
   for (int offset = 0; offset < code_.size();) {
@@ -68,16 +66,17 @@ int Chunk::disassemble_instruction(int offset) const {
   }
 }
 
-int Chunk::simple_instruction(const char* name, int offset) const {
+int Chunk::simple_instruction(std::string_view name, int offset) {
   std::cout << name << '\n';
   return offset + 1;
 }
 
-int Chunk::constant_instruction(const char* name, int offset) const {
+int Chunk::constant_instruction(std::string_view name, int offset) const {
   const int constant = code_[offset + 1];
   std::cout << std::setfill(' ') << std::setw(16) << std::left << name << ' '
             << std::setw(4) << std::right << constant << " '";
-  std::cout << constants_[constant].to_string() << "'\n";
+  constants_[constant].print();
+  std::cout << "'\n";
   return offset + 2;
 }
 }  // namespace lox::bytecode

@@ -14,10 +14,22 @@ enum InterpretResult {
 };
 
 class VM {
+  inline static Obj* objects{};
+
  public:
-  VM() { reset_stack(); }
+  ~VM() { clean_objects(); }
 
   InterpretResult interpret(const Chunk& chunk);
+
+  template <typename ObjT, typename... Args>
+  static ObjT* allocate_object(Args&&... args) {
+    ObjT* object = new ObjT{std::forward<Args>(args)...};
+    object->next = objects;
+    objects = object;
+    return object;
+  }
+
+  static void clean_objects();
 
  private:
   InterpretResult run();

@@ -2,10 +2,22 @@
 
 #include <iostream>
 
+#include "object.hpp"
+
 namespace lox::bytecode {
+void VM::clean_objects() {
+  Obj* object = objects;
+  while (object != nullptr) {
+    Obj* next = object->next;
+    delete object;
+    object = next;
+  }
+  objects = nullptr;
+}
+
 InterpretResult VM::interpret(const Chunk& chunk) {
   chunk_ = &chunk;
-  ip_ = chunk.code();
+  ip_ = &chunk.get_code(0);
   reset_stack();
   return run();
 }
@@ -26,10 +38,13 @@ InterpretResult VM::run() {
 #ifdef DEBUG_TRACE_EXECUTION
     std::cout << "          ";
     for (const Value* slot = stack_.data(); slot < stack_top_; slot++) {
-      std::cout << "[ " << slot->to_string() << " ]";
+      std::cout << "[ ";
+      slot->print();
+      std::cout << " ]";
     }
     std::cout << '\n';
-    chunk_->disassemble_instruction(static_cast<int>(ip_ - chunk_->code()));
+    chunk_->disassemble_instruction(
+        static_cast<int>(ip_ - &chunk_->get_code(0)));
 #endif
 
     switch (const uint8_t instruction = read_byte()) {
@@ -58,7 +73,18 @@ InterpretResult VM::run() {
         BINARY_OP(<);
         break;
       case OP_ADD:
-        BINARY_OP(+);
+        if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
+          ObjString* b = AS_STRING(pop());
+          ObjString* a = AS_STRING(pop());
+          push(Value{allocate_object<ObjString>(a->string + b->string)});
+        } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
+          const double b = AS_NUMBER(pop());
+          const double a = AS_NUMBER(pop());
+          push(Value{a + b});
+        } else {
+          runtime_error("Operands must be two numbers or two strings.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
         break;
       case OP_SUBTRACT:
         BINARY_OP(-);
@@ -80,7 +106,8 @@ InterpretResult VM::run() {
         push(Value{-AS_NUMBER(pop())});
         break;
       case OP_RETURN:
-        std::cout << pop().to_string() << '\n';
+        pop().print();
+        std::cout << '\n';
         return INTERPRET_OK;
       default:
         break;
@@ -93,7 +120,7 @@ InterpretResult VM::run() {
 void VM::runtime_error(const std::string& message) {
   std::cerr << message << '\n';
 
-  const size_t instruction = ip_ - chunk_->code() - 1;
+  const size_t instruction = ip_ - &chunk_->get_code(0) - 1;
   const int line = chunk_->get_line(static_cast<int>(instruction));
   std::cerr << "[line " << line << "] in script" << '\n';
   reset_stack();

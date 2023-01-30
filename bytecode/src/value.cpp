@@ -1,20 +1,32 @@
 #include "value.hpp"
 
+#include <iostream>
+
+#include "object.hpp"
+
 namespace lox::bytecode {
-std::string Value::to_string() const {
+void Value::print() const {
   switch (type) {
     case VAL_BOOL:
-      return AS_BOOL(*this) ? "true" : "false";
+      std::cout << (AS_BOOL(*this) ? "true" : "false");
+      break;
     case VAL_NIL:
-      return "nil";
-    case VAL_NUMBER: {
-      std::string number = std::to_string(AS_NUMBER(*this));
-      number.erase(number.find_last_not_of('0') + 1, std::string::npos);
-      number.erase(number.find_last_not_of('.') + 1, std::string::npos);
-      return number;
-    }
+      std::cout << "nil";
+      break;
+    case VAL_NUMBER:
+      std::cout << AS_NUMBER(*this);
+      break;
+    case VAL_OBJ:
+      switch (OBJ_TYPE(*this)) {
+        case OBJ_STRING:
+          std::cout << AS_STRING(*this)->string;
+          break;
+        default:
+          break;
+      }
+      break;
     default:
-      return "";
+      break;
   }
 }
 
@@ -36,6 +48,8 @@ bool operator==(const Value& left, const Value& right) {
       return std::abs(AS_NUMBER(left) - AS_NUMBER(right)) <=
              std::max(std::abs(AS_NUMBER(left)), std::abs(AS_NUMBER(right))) *
                  std::numeric_limits<double>::epsilon();
+    case VAL_OBJ:
+      return AS_STRING(left)->string == AS_STRING(right)->string;
     default:
       return false;
   }

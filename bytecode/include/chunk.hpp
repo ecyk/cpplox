@@ -24,17 +24,17 @@ class Chunk {
  public:
   void write(uint8_t byte, int line);
   int add_constant(Value value);
-  Value get_constant(int offset) const;
 
-  void disassemble(const std::string& name) const;
+  void disassemble(std::string_view name) const;
   int disassemble_instruction(int offset) const;
 
-  int get_line(int offset) const { return lines_[offset]; }
-  const uint8_t* code() const { return code_.data(); }
+  const uint8_t& get_code(int offset) const { return code_[offset]; }
+  const int& get_line(int offset) const { return lines_[offset]; }
+  const Value& get_constant(int offset) const { return constants_[offset]; }
 
  private:
-  int simple_instruction(const char* name, int offset) const;
-  int constant_instruction(const char* name, int offset) const;
+  static int simple_instruction(std::string_view name, int offset);
+  int constant_instruction(std::string_view name, int offset) const;
 
   std::vector<uint8_t> code_;
   std::vector<int> lines_;
