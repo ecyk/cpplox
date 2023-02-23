@@ -24,7 +24,7 @@ struct Value {
   explicit Value(Obj* obj) : type{VAL_OBJ}, obj{obj} {}
 
   void print() const;
-  bool is_falsey() const;
+  [[nodiscard]] bool is_falsey() const;
 
   ValueType type{VAL_NIL};
   union {

@@ -21,10 +21,12 @@ struct Obj {
 };
 
 struct ObjString : Obj {
-  explicit ObjString(std::string string)
-      : Obj{OBJ_STRING}, string{std::move(string)} {}
+  template <typename... Args>
+  ObjString(Args&&... args)
+      : Obj{OBJ_STRING}, string{std::forward<Args>(args)...} {}
 
   std::string string;
+  uint32_t hash{::hash(string)};
 };
 
 inline bool is_obj_type(Value value, ObjType type) {

@@ -3,8 +3,7 @@
 #include <array>
 
 #include "chunk.hpp"
-
-#define STACK_MAX 256
+#include "table.hpp"
 
 namespace lox::bytecode {
 enum InterpretResult {
@@ -14,19 +13,42 @@ enum InterpretResult {
 };
 
 class VM {
+  static constexpr size_t STACK_MAX = 256;
+
   inline static Obj* objects{};
+  inline static Table strings;
 
  public:
+  VM() = default;
   ~VM() { clean_objects(); }
+
+  VM(const VM&) = delete;
+  VM& operator=(const VM&) = delete;
+  VM(VM&&) = delete;
+  VM& operator=(VM&&) = delete;
 
   InterpretResult interpret(const Chunk& chunk);
 
   template <typename ObjT, typename... Args>
-  static ObjT* allocate_object(Args&&... args) {
+  static Value allocate_object(Args&&... args) {
+    if constexpr (std::is_same_v<ObjT, ObjString>) {
+      ObjString* interned = strings.find_string(std::forward<Args>(args)...);
+
+      if (interned != nullptr) {
+        return Value{interned};
+      }
+    }
+
     ObjT* object = new ObjT{std::forward<Args>(args)...};
+
     object->next = objects;
     objects = object;
-    return object;
+
+    if constexpr (std::is_same_v<ObjT, ObjString>) {
+      strings.set(*object, {});
+    }
+
+    return Value{object};
   }
 
   static void clean_objects();
@@ -41,7 +63,7 @@ class VM {
 
   void reset_stack() {
     stack_.fill({});
-    stack_top_ = &stack_[0];
+    stack_top_ = stack_.data();
   }
 
   uint8_t read_byte() { return *ip_++; }

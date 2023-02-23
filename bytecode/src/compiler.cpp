@@ -168,8 +168,7 @@ void Compiler::literal() {
 void Compiler::string() {
   previous_.lexeme_.remove_prefix(1);
   previous_.lexeme_.remove_suffix(1);
-  emit_constant(
-      Value{VM::allocate_object<ObjString>(std::string{previous_.lexeme_})});
+  emit_constant(VM::allocate_object<ObjString>(previous_.lexeme_));
 }
 
 void Compiler::number() {

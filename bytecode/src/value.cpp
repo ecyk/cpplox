@@ -49,7 +49,7 @@ bool operator==(const Value& left, const Value& right) {
              std::max(std::abs(AS_NUMBER(left)), std::abs(AS_NUMBER(right))) *
                  std::numeric_limits<double>::epsilon();
     case VAL_OBJ:
-      return AS_STRING(left)->string == AS_STRING(right)->string;
+      return AS_OBJ(left) == AS_OBJ(right);
     default:
       return false;
   }

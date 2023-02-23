@@ -30,7 +30,7 @@ class Compiler {
   };
 
  public:
-  Compiler(const std::string& source);
+  explicit Compiler(const std::string& source);
 
   bool compile(Chunk& chunk);
 
