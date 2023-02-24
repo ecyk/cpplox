@@ -1,6 +1,6 @@
 #pragma once
 
-#include <string_view>
+#include <string>
 
 namespace lox::bytecode {
 enum TokenType {
@@ -72,7 +72,7 @@ class Token {
 
 class Scanner {
  public:
-  Scanner(const std::string& source)
+  explicit Scanner(const std::string& source)
       : start_{source.c_str()}, current_{source.c_str()} {}
 
   Token scan_token();
@@ -87,16 +87,16 @@ class Scanner {
   }
 
   Token identifier();
-  TokenType identifier_type() const;
+  [[nodiscard]] TokenType identifier_type() const;
   Token number();
   Token string();
 
-  char peek() const { return *current_; }
-  char peek_next() const;
+  [[nodiscard]] char peek() const { return *current_; }
+  [[nodiscard]] char peek_next() const;
   bool match(char expected);
   char advance() { return *current_++; }
 
-  bool is_at_end() const { return *current_ == '\0'; }
+  [[nodiscard]] bool is_at_end() const { return *current_ == '\0'; }
 
   const char *start_{}, *current_{};
   int line_{1};

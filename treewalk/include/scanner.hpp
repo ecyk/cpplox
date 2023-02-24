@@ -28,7 +28,6 @@ class Scanner {
 
   [[nodiscard]] bool is_at_end() const;
 
- private:
   std::string source_;
 
   std::vector<Token> tokens_;

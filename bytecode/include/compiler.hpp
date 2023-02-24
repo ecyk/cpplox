@@ -50,7 +50,7 @@ class Compiler {
   void string();
   void number();
 
-  ParseRule* get_rule(TokenType type) { return &rules_[type]; }
+  ParseRule* get_rule(TokenType type) { return &rules_.at(type); }
   void parse_precedence(Precedence precedence);
 
   void advance();

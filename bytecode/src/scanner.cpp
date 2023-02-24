@@ -1,6 +1,7 @@
 #include "scanner.hpp"
 
 #include <cctype>
+#include <cstring>
 
 namespace lox::bytecode {
 Token Scanner::scan_token() {

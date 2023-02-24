@@ -1,6 +1,7 @@
 #include "value.hpp"
 
 #include <iostream>
+#include <limits>
 
 #include "object.hpp"
 

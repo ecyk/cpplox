@@ -21,6 +21,12 @@ class Visitor {
  public:
   virtual ~Visitor() = default;
 
+  Visitor() = default;
+  Visitor(const Visitor&) = delete;
+  Visitor& operator=(const Visitor&) = delete;
+  Visitor(Visitor&&) = delete;
+  Visitor& operator=(Visitor&&) = delete;
+
   virtual void visit(Assign& assign) = 0;
   virtual void visit(Binary& binary) = 0;
   virtual void visit(Call& call) = 0;
@@ -38,6 +44,12 @@ class Visitor {
 class Expr {
  public:
   virtual ~Expr() = default;
+
+  Expr() = default;
+  Expr(const Expr&) = delete;
+  Expr& operator=(const Expr&) = delete;
+  Expr(Expr&&) = default;
+  Expr& operator=(Expr&&) = default;
 
   virtual void accept(Visitor& visitor) = 0;
 
@@ -138,7 +150,7 @@ class Set : public Expr {
 
 class This : public Expr {
  public:
-  This(Token keyword) : keyword_{std::move(keyword)} {}
+  explicit This(Token keyword) : keyword_{std::move(keyword)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
@@ -169,7 +181,7 @@ class Unary : public Expr {
 
 class Variable : public Expr {
  public:
-  Variable(Token name) : name_{std::move(name)} {}
+  explicit Variable(Token name) : name_{std::move(name)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 

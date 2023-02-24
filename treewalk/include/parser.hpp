@@ -9,7 +9,7 @@ class ParseError : public std::exception {
 
 class Parser {
  public:
-  Parser(std::vector<Token> tokens);
+  explicit Parser(std::vector<Token> tokens);
 
   std::vector<Scope<Stmt>> parse();
 

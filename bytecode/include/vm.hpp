@@ -75,6 +75,6 @@ class VM {
   const uint8_t* ip_{};
 
   std::array<Value, STACK_MAX> stack_;
-  Value* stack_top_;
+  Value* stack_top_{};
 };
 }  // namespace lox::bytecode

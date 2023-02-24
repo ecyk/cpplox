@@ -1,5 +1,6 @@
 #pragma once
 
+#include <limits>
 #include <unordered_map>
 #include <variant>
 
@@ -26,7 +27,7 @@ class Object {
 
  public:
   Object() : variant_{Nil{}} {}
-  Object(Variant variant) : variant_{std::move(variant)} {}
+  explicit Object(Variant variant) : variant_{std::move(variant)} {}
 
   template <typename ObjectT>
   [[nodiscard]] constexpr bool is() const {
@@ -40,7 +41,7 @@ class Object {
   }
 
   template <typename ObjectT>
-  constexpr const ObjectT& as() const {
+  [[nodiscard]] constexpr const ObjectT& as() const {
     return as_impl<const Object, ObjectT>(*this);
   }
 
@@ -50,10 +51,10 @@ class Object {
   }
 
   Object call(const std::vector<Object>& arguments);
-  int arity() const;
+  [[nodiscard]] int arity() const;
 
-  std::string stringify() const;
-  bool is_truthy() const;
+  [[nodiscard]] std::string stringify() const;
+  [[nodiscard]] bool is_truthy() const;
 
  private:
   template <typename T, typename ObjectT>
@@ -89,16 +90,22 @@ class Function {
  public:
   virtual ~Function() = default;
 
-  Function(const Ref<Environment>& closure = {}, bool is_initializer = false,
-           stmt::Function* declaration = nullptr,
-           Interpreter* interpreter = nullptr);
+  explicit Function(const Ref<Environment>& closure = {},
+                    bool is_initializer = false,
+                    stmt::Function* declaration = nullptr,
+                    Interpreter* interpreter = nullptr);
+
+  Function(const Function&) = delete;
+  Function& operator=(const Function&) = delete;
+  Function(Function&&) = default;
+  Function& operator=(Function&&) = default;
 
   virtual Object call(const std::vector<Object>& arguments);
-  virtual int arity() const { return arity_; }
+  [[nodiscard]] virtual int arity() const { return arity_; }
 
-  Ref<Function> bind(const Object& instance) const;
+  [[nodiscard]] Ref<Function> bind(const Object& instance) const;
 
-  std::string to_string() const;
+  [[nodiscard]] std::string to_string() const;
 
  private:
   Ref<Environment> closure_;
@@ -116,11 +123,11 @@ class Class {
   Class(Methods methods, Object* superclass, stmt::Class* declaration);
 
   Object call(const std::vector<Object>& arguments);
-  int arity() const { return arity_; }
+  [[nodiscard]] int arity() const { return arity_; }
 
-  const Function* find_method(const std::string& name) const;
+  [[nodiscard]] const Function* find_method(const std::string& name) const;
 
-  std::string to_string() const;
+  [[nodiscard]] std::string to_string() const;
 
  private:
   Methods methods_;
@@ -134,14 +141,14 @@ class Instance {
  public:
   using Fields = std::unordered_map<std::string, Object>;
 
-  Instance(Class* class_) : class_{class_} {}
+  explicit Instance(Class* class_) : class_{class_} {}
 
-  const Object* get_field(const std::string& name) const;
-  const Function* get_method(const std::string& name) const;
+  [[nodiscard]] const Object* get_field(const std::string& name) const;
+  [[nodiscard]] const Function* get_method(const std::string& name) const;
 
   void set_field(const std::string& name, const Object& object);
 
-  std::string to_string() const;
+  [[nodiscard]] std::string to_string() const;
 
  private:
   Fields fields_;

@@ -61,9 +61,9 @@ class Token {
  public:
   Token(TokenType token_type, std::string lexeme, size_t line);
 
-  TokenType get_type() const { return token_type_; }
-  const std::string& get_lexeme() const { return lexeme_; }
-  size_t get_line() const { return line_; }
+  [[nodiscard]] TokenType get_type() const { return token_type_; }
+  [[nodiscard]] const std::string& get_lexeme() const { return lexeme_; }
+  [[nodiscard]] size_t get_line() const { return line_; }
 
   std::string to_string();
 

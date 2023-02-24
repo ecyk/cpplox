@@ -1,7 +1,7 @@
 #include "compiler.hpp"
 
-#include <iomanip>
 #include <iostream>
+#include <limits>
 
 #include "object.hpp"
 #include "vm.hpp"

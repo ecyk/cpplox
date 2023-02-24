@@ -26,7 +26,7 @@ class Chunk {
   int add_constant(Value value);
 
   void disassemble(std::string_view name) const;
-  [[nodiscard]] int disassemble_instruction(int offset) const;
+  int disassemble_instruction(int offset) const;
 
   [[nodiscard]] const uint8_t* get_code(int offset) const {
     return &code_[offset];

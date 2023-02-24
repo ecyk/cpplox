@@ -16,13 +16,18 @@ struct Obj {
 
   explicit Obj(ObjType type) : type{type} {}
 
+  Obj(const Obj&) = delete;
+  Obj& operator=(const Obj&) = delete;
+  Obj(Obj&&) = delete;
+  Obj& operator=(Obj&&) = delete;
+
   ObjType type;
   Obj* next{};
 };
 
 struct ObjString : Obj {
   template <typename... Args>
-  ObjString(Args&&... args)
+  explicit ObjString(Args&&... args)
       : Obj{OBJ_STRING}, string{std::forward<Args>(args)...} {}
 
   std::string string;

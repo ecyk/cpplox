@@ -214,7 +214,6 @@ void Interpreter::visit(expr::Binary& binary) {
 
       throw RuntimeError(binary.op_,
                          "Operands must be two numbers or two strings.");
-      break;
     case TokenType::SLASH:
       check_number_operands(binary.op_, left, right);
       return_value_ = Object{left.as<Number>() / right.as<Number>()};

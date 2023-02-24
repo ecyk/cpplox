@@ -51,7 +51,8 @@ Scope<Stmt> Parser::class_declaration() {
 
   consume(TokenType::RIGHT_BRACE, "Expect '}' after class body.");
 
-  return std::make_unique<stmt::Class>(name, superclass, std::move(methods));
+  return std::make_unique<stmt::Class>(name, std::move(superclass),
+                                       std::move(methods));
 }
 
 stmt::Function Parser::fun_declaration(const std::string& kind) {
@@ -256,8 +257,10 @@ Scope<Expr> Parser::assignment() {
         expr_ptr != nullptr) {
       const Token& name = expr_ptr->name_;
       return std::make_unique<expr::Assign>(name, std::move(value));
-    } else if (auto* expr_ptr = dynamic_cast<expr::Get*>(expr.get());
-               expr_ptr != nullptr) {
+    }
+
+    if (auto* expr_ptr = dynamic_cast<expr::Get*>(expr.get());
+        expr_ptr != nullptr) {
       const Token& name = expr_ptr->name_;
       return std::make_unique<expr::Set>(std::move(expr_ptr->object_), name,
                                          std::move(value));
