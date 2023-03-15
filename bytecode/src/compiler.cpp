@@ -27,7 +27,7 @@ Compiler::Compiler(const std::string& source) : scanner_{source} {
   rules_[TOKEN_GREATER_EQUAL] = {nullptr, &Compiler::binary, PREC_COMPARISON};
   rules_[TOKEN_LESS] = {nullptr, &Compiler::binary, PREC_COMPARISON};
   rules_[TOKEN_LESS_EQUAL] = {nullptr, &Compiler::binary, PREC_COMPARISON};
-  rules_[TOKEN_IDENTIFIER] = {nullptr, nullptr, PREC_NONE};
+  rules_[TOKEN_IDENTIFIER] = {&Compiler::variable, nullptr, PREC_NONE};
   rules_[TOKEN_STRING] = {&Compiler::string, nullptr, PREC_NONE};
   rules_[TOKEN_NUMBER] = {&Compiler::number, nullptr, PREC_NONE};
   rules_[TOKEN_AND] = {nullptr, nullptr, PREC_NONE};
@@ -54,7 +54,11 @@ bool Compiler::compile(Chunk& chunk) {
   chunk_ = &chunk;
 
   advance();
-  expression();
+
+  while (!match(TOKEN_EOF)) {
+    declaration();
+  }
+
   consume(TOKEN_EOF, "Expect end of expression.");
 
   emit_return();
@@ -77,18 +81,57 @@ void Compiler::emit_bytes(uint8_t byte1, uint8_t byte2) {
 }
 
 void Compiler::emit_constant(Value value) {
-  int index = current_chunk()->add_constant(value);
-  if (index > std::numeric_limits<uint8_t>::max()) {
-    error("Too many constants in one chunk.");
-    index = 0;
+  emit_bytes(OP_CONSTANT, make_constant(value));
+}
+
+void Compiler::declaration() {
+  if (match(TOKEN_VAR)) {
+    var_declaration();
+  } else {
+    statement();
   }
 
-  emit_bytes(OP_CONSTANT, index);
+  if (panic_mode_) {
+    synchronize();
+  }
+}
+
+void Compiler::var_declaration() {
+  const uint8_t global = parse_variable("Expect variable name.");
+
+  if (match(TOKEN_EQUAL)) {
+    expression();
+  } else {
+    emit_byte(OP_NIL);
+  }
+  consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+
+  define_variable(global);
+}
+
+void Compiler::statement() {
+  if (match(TOKEN_PRINT)) {
+    print_statement();
+  } else {
+    expression_statement();
+  }
+}
+
+void Compiler::print_statement() {
+  expression();
+  consume(TOKEN_SEMICOLON, "Expect ';' after value.");
+  emit_byte(OP_PRINT);
+}
+
+void Compiler::expression_statement() {
+  expression();
+  consume(TOKEN_SEMICOLON, "Expect ';' after expression.");
+  emit_byte(OP_POP);
 }
 
 void Compiler::expression() { parse_precedence(PREC_ASSIGNMENT); }
 
-void Compiler::binary() {
+void Compiler::binary(bool /*can_assign*/) {
   const TokenType op = previous_.type_;
   parse_precedence(static_cast<Precedence>(get_rule(op)->precedence + 1));
 
@@ -128,7 +171,7 @@ void Compiler::binary() {
   }
 }
 
-void Compiler::unary() {
+void Compiler::unary(bool /*can_assign*/) {
   const TokenType op = previous_.type_;
   parse_precedence(PREC_UNARY);
 
@@ -144,12 +187,12 @@ void Compiler::unary() {
   }
 }
 
-void Compiler::grouping() {
+void Compiler::grouping(bool /*can_assign*/) {
   expression();
   consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
-void Compiler::literal() {
+void Compiler::literal(bool /*can_assign*/) {
   switch (previous_.type_) {
     case TOKEN_FALSE:
       emit_byte(OP_FALSE);
@@ -165,15 +208,53 @@ void Compiler::literal() {
   }
 }
 
-void Compiler::string() {
+void Compiler::string(bool /*can_assign*/) {
   previous_.lexeme_.remove_prefix(1);
   previous_.lexeme_.remove_suffix(1);
   emit_constant(VM::allocate_object<ObjString>(previous_.lexeme_));
 }
 
-void Compiler::number() {
+void Compiler::variable(bool can_assign) {
+  named_variable(previous_, can_assign);
+}
+
+void Compiler::named_variable(const Token& name, bool can_assign) {
+  const uint8_t arg = identifier_constant(name);
+
+  if (can_assign && match(TOKEN_EQUAL)) {
+    expression();
+    emit_bytes(OP_SET_GLOBAL, arg);
+  } else {
+    emit_bytes(OP_GET_GLOBAL, arg);
+  }
+}
+
+void Compiler::number(bool /*can_assign*/) {
   const double value = strtod(previous_.lexeme_.data(), nullptr);
   emit_constant(Value{value});
+}
+
+uint8_t Compiler::parse_variable(std::string_view error_message) {
+  consume(TOKEN_IDENTIFIER, error_message);
+  return identifier_constant(previous_);
+}
+
+void Compiler::define_variable(uint8_t global) {
+  emit_bytes(OP_DEFINE_GLOBAL, global);
+}
+
+uint8_t Compiler::make_constant(Value value) {
+  const int index = current_chunk()->add_constant(value);
+  if (index > std::numeric_limits<uint8_t>::max()) {
+    error("Too many constants in one chunk.");
+    return 0;
+  }
+
+  return static_cast<uint8_t>(index);
+}
+
+uint8_t Compiler::identifier_constant(const Token& name) {
+  return make_constant(VM::allocate_object<ObjString>(name.lexeme_));
 }
 
 void Compiler::parse_precedence(Precedence precedence) {
@@ -184,12 +265,17 @@ void Compiler::parse_precedence(Precedence precedence) {
     return;
   }
 
-  (this->*prefix_rule)();
+  const bool can_assign = precedence <= PREC_ASSIGNMENT;
+  (this->*prefix_rule)(can_assign);
 
   while (precedence <= get_rule(current_.type_)->precedence) {
     advance();
     const ParseFn infix_rule = get_rule(previous_.type_)->infix;
-    (this->*infix_rule)();
+    (this->*infix_rule)(can_assign);
+  }
+
+  if (can_assign && match(TOKEN_EQUAL)) {
+    error("Invalid assignment target.");
   }
 }
 
@@ -207,12 +293,48 @@ void Compiler::advance() {
 }
 
 void Compiler::consume(TokenType type, std::string_view message) {
-  if (current_.type_ == type) {
+  if (check(type)) {
     advance();
     return;
   }
 
   error_at_current(message);
+}
+
+bool Compiler::check(TokenType type) const { return current_.type_ == type; }
+
+bool Compiler::match(TokenType type) {
+  if (!check(type)) {
+    return false;
+  }
+
+  advance();
+  return true;
+}
+
+void Compiler::synchronize() {
+  panic_mode_ = false;
+
+  while (current_.type_ != TOKEN_EOF) {
+    if (previous_.type_ == TOKEN_SEMICOLON) {
+      return;
+    }
+    switch (current_.type_) {
+      case TOKEN_CLASS:
+      case TOKEN_FUN:
+      case TOKEN_VAR:
+      case TOKEN_FOR:
+      case TOKEN_IF:
+      case TOKEN_WHILE:
+      case TOKEN_PRINT:
+      case TOKEN_RETURN:
+        return;
+
+      default:;  // Do nothing.
+    }
+
+    advance();
+  }
 }
 
 void Compiler::error(std::string_view message) { error_at(previous_, message); }

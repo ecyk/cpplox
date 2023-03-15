@@ -26,6 +26,7 @@ int run_file(const std::string& path) {
                            std::istreambuf_iterator<char>{}};
 
   const InterpretResult result = run(source);
+  VM::clean_objects();
 
   if (result == INTERPRET_COMPILE_ERROR) {
     return 65;
@@ -49,5 +50,6 @@ void run_prompt() {
 
     run(source_line);
   }
+  VM::clean_objects();
 }
 }  // namespace lox::bytecode

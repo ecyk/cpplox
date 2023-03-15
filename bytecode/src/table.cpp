@@ -1,28 +1,28 @@
 #include "table.hpp"
 
 namespace lox::bytecode {
-bool Table::set(ObjString& key, Value value) {
+bool Table::set(ObjString* key, Value value) {
   if (size_ + 1 > static_cast<int>(static_cast<float>(capacity_) * MAX_LOAD)) {
     adjust_capacity(capacity_ * 2);
   }
 
-  Entry* entry = find_entry(entries_, capacity_, &key);
+  Entry* entry = find_entry(entries_, capacity_, key);
   const bool is_new_key = entry->key == nullptr;
   if (is_new_key) {
     size_++;
   }
 
-  entry->key = &key;
+  entry->key = key;
   entry->value = value;
   return is_new_key;
 }
 
-bool Table::get(const ObjString& key, Value* value) const {
+bool Table::get(ObjString* key, Value* value) const {
   if (size_ == 0) {
     return false;
   }
 
-  Entry* entry = find_entry(entries_, capacity_, &key);
+  Entry* entry = find_entry(entries_, capacity_, key);
   if (entry->key == nullptr) {
     return false;
   }
@@ -31,12 +31,12 @@ bool Table::get(const ObjString& key, Value* value) const {
   return true;
 }
 
-bool Table::del(const ObjString& key) {
+bool Table::del(ObjString* key) {
   if (size_ == 0) {
     return false;
   }
 
-  Entry* entry = find_entry(entries_, capacity_, &key);
+  Entry* entry = find_entry(entries_, capacity_, key);
   if (entry->key == nullptr) {
     return false;
   }
@@ -50,7 +50,7 @@ void Table::add_all(Table& to) const {
   for (int i = 0; i < capacity_; i++) {
     Entry* entry = &entries_[i];
     if (entry->key != nullptr) {
-      to.set(*entry->key, entry->value);
+      to.set(entry->key, entry->value);
     }
   }
 }

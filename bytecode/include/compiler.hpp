@@ -21,7 +21,7 @@ class Compiler {
     PREC_PRIMARY
   };
 
-  using ParseFn = void (Compiler::*)();
+  using ParseFn = void (Compiler::*)(bool can_assign);
 
   struct ParseRule {
     ParseFn prefix;
@@ -42,19 +42,36 @@ class Compiler {
 
   Chunk* current_chunk() { return chunk_; }
 
+  void declaration();
+  void var_declaration();
+  void statement();
+  void print_statement();
+  void expression_statement();
   void expression();
-  void binary();
-  void unary();
-  void grouping();
-  void literal();
-  void string();
-  void number();
+  void binary(bool can_assign);
+  void unary(bool can_assign);
+  void grouping(bool can_assign);
+  void literal(bool can_assign);
+  void string(bool can_assign);
+  void variable(bool can_assign);
+  void named_variable(const Token& name, bool can_assign);
+  void number(bool can_assign);
+
+  uint8_t parse_variable(std::string_view error_message);
+  void define_variable(uint8_t global);
+
+  uint8_t make_constant(Value value);
+  uint8_t identifier_constant(const Token& name);
 
   ParseRule* get_rule(TokenType type) { return &rules_.at(type); }
   void parse_precedence(Precedence precedence);
 
   void advance();
   void consume(TokenType type, std::string_view message);
+  [[nodiscard]] bool check(TokenType type) const;
+  bool match(TokenType type);
+
+  void synchronize();
 
   void error(std::string_view message);
   void error_at_current(std::string_view message);

@@ -60,6 +60,34 @@ InterpretResult VM::run() {
       case OP_FALSE:
         push(Value{false});
         break;
+      case OP_POP:
+        pop();
+        break;
+      case OP_GET_GLOBAL: {
+        ObjString* name = AS_STRING(read_constant());
+        Value value;
+        if (!globals.get(name, &value)) {
+          runtime_error("Undefined variable '" + name->string + "'.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        push(value);
+        break;
+      }
+      case OP_DEFINE_GLOBAL: {
+        ObjString* name = AS_STRING(read_constant());
+        globals.set(name, peek(0));
+        pop();
+        break;
+      }
+      case OP_SET_GLOBAL: {
+        ObjString* name = AS_STRING(read_constant());
+        if (globals.set(name, peek(0))) {
+          globals.del(name);
+          runtime_error("Undefined variable '" + name->string + "'.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        break;
+      }
       case OP_EQUAL: {
         const Value b = pop();
         const Value a = pop();
@@ -105,9 +133,11 @@ InterpretResult VM::run() {
         }
         push(Value{-AS_NUMBER(pop())});
         break;
-      case OP_RETURN:
+      case OP_PRINT:
         pop().print();
         std::cout << '\n';
+        break;
+      case OP_RETURN:
         return INTERPRET_OK;
       default:
         break;

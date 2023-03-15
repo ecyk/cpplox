@@ -16,19 +16,10 @@ class VM {
   static constexpr size_t STACK_MAX = 256;
 
   inline static Obj* objects{};
+  inline static Table globals;
   inline static Table strings;
 
  public:
-  VM() = default;
-  ~VM() { clean_objects(); }
-
-  VM(const VM&) = delete;
-  VM& operator=(const VM&) = delete;
-  VM(VM&&) = delete;
-  VM& operator=(VM&&) = delete;
-
-  InterpretResult interpret(const Chunk& chunk);
-
   template <typename ObjT, typename... Args>
   static Value allocate_object(Args&&... args) {
     if constexpr (std::is_same_v<ObjT, ObjString>) {
@@ -45,13 +36,15 @@ class VM {
     objects = object;
 
     if constexpr (std::is_same_v<ObjT, ObjString>) {
-      strings.set(*object, {});
+      strings.set(object, {});
     }
 
     return Value{object};
   }
 
   static void clean_objects();
+
+  InterpretResult interpret(const Chunk& chunk);
 
  private:
   InterpretResult run();

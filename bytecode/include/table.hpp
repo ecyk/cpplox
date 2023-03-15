@@ -17,9 +17,9 @@ class Table {
  public:
   Table() : entries_{std::make_unique<Entry[]>(INITIAL_CAPACITY)} {}
 
-  bool set(ObjString& key, Value value);
-  bool get(const ObjString& key, Value* value) const;
-  bool del(const ObjString& key);
+  bool set(ObjString* key, Value value);
+  bool get(ObjString* key, Value* value) const;
+  bool del(ObjString* key);
 
   void add_all(Table& to) const;
   [[nodiscard]] ObjString* find_string(std::string_view string) const;
