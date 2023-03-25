@@ -42,6 +42,10 @@ int Chunk::disassemble_instruction(int offset) const {
       return simple_instruction("OP_FALSE", offset);
     case OP_POP:
       return simple_instruction("OP_POP", offset);
+    case OP_GET_LOCAL:
+      return byte_instruction("OP_GET_LOCAL", offset);
+    case OP_SET_LOCAL:
+      return byte_instruction("OP_SET_LOCAL", offset);
     case OP_GET_GLOBAL:
       return constant_instruction("OP_GET_GLOBAL", offset);
     case OP_DEFINE_GLOBAL:
@@ -87,6 +91,13 @@ int Chunk::constant_instruction(std::string_view name, int offset) const {
             << std::setw(4) << std::right << constant << " '";
   constants_[constant].print();
   std::cout << "'\n";
+  return offset + 2;
+}
+
+int Chunk::byte_instruction(std::string_view name, int offset) const {
+  const int slot = code_[offset + 1];
+  std::cout << std::setfill(' ') << std::setw(16) << std::left << name << ' '
+            << std::setw(4) << std::right << " '" << slot << "'\n";
   return offset + 2;
 }
 }  // namespace lox::bytecode

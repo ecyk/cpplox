@@ -29,6 +29,13 @@ class Compiler {
     Precedence precedence;
   };
 
+  struct Local {
+    Token name;
+    int depth{};
+  };
+
+  static constexpr int UINT8_COUNT = 256;
+
  public:
   explicit Compiler(const std::string& source);
 
@@ -46,6 +53,7 @@ class Compiler {
   void var_declaration();
   void statement();
   void print_statement();
+  void block_statement();
   void expression_statement();
   void expression();
   void binary(bool can_assign);
@@ -58,12 +66,19 @@ class Compiler {
   void number(bool can_assign);
 
   uint8_t parse_variable(std::string_view error_message);
+  void declare_variable();
   void define_variable(uint8_t global);
+  int resolve_local(const Token& name);
 
   uint8_t make_constant(Value value);
   uint8_t identifier_constant(const Token& name);
+  void add_local(const Token& name);
+  void mark_initialized() { locals_[local_count_ - 1].depth = scope_depth_; }
 
-  ParseRule* get_rule(TokenType type) { return &rules_.at(type); }
+  void begin_scope() { scope_depth_++; }
+  void end_scope();
+
+  ParseRule* get_rule(TokenType type) { return &rules_[type]; }
   void parse_precedence(Precedence precedence);
 
   void advance();
@@ -84,6 +99,10 @@ class Compiler {
   bool panic_mode_{};
 
   std::array<ParseRule, TOKEN_COUNT> rules_{};
+
+  std::array<Local, UINT8_COUNT> locals_{};
+  int local_count_{};
+  int scope_depth_{};
 
   Chunk* chunk_{};
 };

@@ -454,9 +454,9 @@ Token& Parser::advance() {
 
 bool Parser::is_at_end() { return peek().get_type() == TokenType::EOF_; }
 
-Token& Parser::peek() { return tokens_.at(current_); }
+Token& Parser::peek() { return tokens_[current_]; }
 
-Token& Parser::previous() { return tokens_.at(current_ - 1); }
+Token& Parser::previous() { return tokens_[current_ - 1]; }
 
 Token& Parser::consume(TokenType type, const std::string& message) {
   if (check(type)) {

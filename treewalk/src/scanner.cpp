@@ -191,21 +191,21 @@ char Scanner::peek() const {
   if (is_at_end()) {
     return '\0';
   }
-  return source_.at(current_);
+  return source_[current_];
 }
 
 char Scanner::peek_next() const {
   if (current_ + 1 >= source_.size()) {
     return '\0';
   }
-  return source_.at(current_ + 1);
+  return source_[current_ + 1];
 }
 
 bool Scanner::match(char expected) {
   if (is_at_end()) {
     return false;
   }
-  if (source_.at(current_) != expected) {
+  if (source_[current_] != expected) {
     return false;
   }
 
@@ -213,7 +213,7 @@ bool Scanner::match(char expected) {
   return true;
 }
 
-char Scanner::advance() { return source_.at(current_++); }
+char Scanner::advance() { return source_[current_++]; }
 
 bool Scanner::is_at_end() const { return current_ >= source_.size(); }
 }  // namespace lox::treewalk

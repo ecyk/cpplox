@@ -9,6 +9,8 @@ enum OpCode : uint8_t {
   OP_TRUE,
   OP_FALSE,
   OP_POP,
+  OP_GET_LOCAL,
+  OP_SET_LOCAL,
   OP_GET_GLOBAL,
   OP_DEFINE_GLOBAL,
   OP_SET_GLOBAL,
@@ -45,6 +47,7 @@ class Chunk {
   static int simple_instruction(std::string_view name, int offset);
   [[nodiscard]] int constant_instruction(std::string_view name,
                                          int offset) const;
+  [[nodiscard]] int byte_instruction(std::string_view name, int offset) const;
 
   std::vector<uint8_t> code_;
   std::vector<int> lines_;
