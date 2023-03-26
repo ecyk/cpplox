@@ -17,7 +17,7 @@ int Chunk::add_constant(Value value) {
 void Chunk::disassemble(std::string_view name) const {
   std::cout << "== " << name << " ==\n";
 
-  for (int offset = 0; offset < code_.size();) {
+  for (int offset = 0; offset < static_cast<int>(code_.size());) {
     offset = disassemble_instruction(offset);
   }
 }
@@ -72,6 +72,12 @@ int Chunk::disassemble_instruction(int offset) const {
       return simple_instruction("OP_NEGATE", offset);
     case OP_PRINT:
       return simple_instruction("OP_PRINT", offset);
+    case OP_JUMP:
+      return jump_instruction("OP_JUMP", 1, offset);
+    case OP_JUMP_IF_FALSE:
+      return jump_instruction("OP_JUMP_IF_FALSE", 1, offset);
+    case OP_LOOP:
+      return jump_instruction("OP_LOOP", -1, offset);
     case OP_RETURN:
       return simple_instruction("OP_RETURN", offset);
     default:
@@ -97,7 +103,16 @@ int Chunk::constant_instruction(std::string_view name, int offset) const {
 int Chunk::byte_instruction(std::string_view name, int offset) const {
   const int slot = code_[offset + 1];
   std::cout << std::setfill(' ') << std::setw(16) << std::left << name << ' '
-            << std::setw(4) << std::right << " '" << slot << "'\n";
+            << std::setw(4) << std::right << slot << '\n';
   return offset + 2;
+}
+
+int Chunk::jump_instruction(std::string_view name, int sign, int offset) const {
+  uint16_t jump = code_[offset + 1] << 8U;
+  jump |= code_[offset + 2];
+  std::cout << std::setfill(' ') << std::setw(16) << std::left << name
+            << std::setw(4) << std::right << ' ' << offset << " -> "
+            << offset + 3 + sign * jump << '\n';
+  return offset + 3;
 }
 }  // namespace lox::bytecode

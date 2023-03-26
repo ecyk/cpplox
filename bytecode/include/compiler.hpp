@@ -46,16 +46,22 @@ class Compiler {
   void emit_bytes(uint8_t byte1, uint8_t byte2);
   void emit_constant(Value value);
   void emit_return() { emit_byte(OP_RETURN); }
-
-  Chunk* current_chunk() { return chunk_; }
+  int emit_jump(uint8_t instruction);
+  void patch_jump(int offset);
+  void emit_loop(int loop_start);
 
   void declaration();
   void var_declaration();
   void statement();
   void print_statement();
+  void if_statement();
+  void while_statement();
+  void for_statement();
   void block_statement();
   void expression_statement();
   void expression();
+  void and_(bool can_assign);
+  void or_(bool can_assign);
   void binary(bool can_assign);
   void unary(bool can_assign);
   void grouping(bool can_assign);
@@ -91,6 +97,8 @@ class Compiler {
   void error(std::string_view message);
   void error_at_current(std::string_view message);
   void error_at(const Token& token, std::string_view message);
+
+  Chunk* current_chunk() { return chunk_; }
 
   Scanner scanner_;
 

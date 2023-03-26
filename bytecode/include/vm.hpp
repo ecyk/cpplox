@@ -51,15 +51,13 @@ class VM {
 
   void push(Value value) { *stack_top_++ = value; }
   Value pop() { return *--stack_top_; }
-
   Value peek(int distance) { return *(stack_top_ - 1 - distance); }
 
-  void reset_stack() {
-    stack_.fill({});
-    stack_top_ = stack_.data();
-  }
-
+  void reset_stack();
   uint8_t read_byte() { return *ip_++; }
+  uint16_t read_short() {
+    return (ip_ += 2, static_cast<uint16_t>(*(ip_ - 2) << 8U) | *(ip_ - 1));
+  }
   Value read_constant() { return chunk_->get_constant(read_byte()); }
 
   void runtime_error(const std::string& message);

@@ -9,7 +9,7 @@ struct Entry {
 };
 
 class Table {
-  static constexpr size_t INITIAL_CAPACITY = 8;
+  static constexpr int INITIAL_CAPACITY = 8;
   static constexpr float MAX_LOAD = 0.75F;
 
   using Entries = std::unique_ptr<Entry[]>;

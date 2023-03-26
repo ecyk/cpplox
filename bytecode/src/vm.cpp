@@ -52,7 +52,7 @@ InterpretResult VM::run() {
         push(read_constant());
         break;
       case OP_NIL:
-        push(Value{});
+        push({});
         break;
       case OP_TRUE:
         push(Value{true});
@@ -147,6 +147,23 @@ InterpretResult VM::run() {
         pop().print();
         std::cout << '\n';
         break;
+      case OP_JUMP: {
+        const uint16_t offset = read_short();
+        ip_ += offset;
+        break;
+      }
+      case OP_JUMP_IF_FALSE: {
+        const uint16_t offset = read_short();
+        if (peek(0).is_falsey()) {
+          ip_ += offset;
+        }
+        break;
+      }
+      case OP_LOOP: {
+        const uint16_t offset = read_short();
+        ip_ -= offset;
+        break;
+      }
       case OP_RETURN:
         return INTERPRET_OK;
       default:
@@ -157,11 +174,16 @@ InterpretResult VM::run() {
 #undef BINARY_OP
 }
 
+void VM::reset_stack() {
+  stack_.fill({});
+  stack_top_ = stack_.data();
+}
+
 void VM::runtime_error(const std::string& message) {
   std::cerr << message << '\n';
 
-  const size_t instruction = ip_ - chunk_->get_code(0) - 1;
-  const int line = chunk_->get_line(static_cast<int>(instruction));
+  const int instruction = ip_ - chunk_->get_code(0) - 1;
+  const int line = chunk_->get_line(instruction);
   std::cerr << "[line " << line << "] in script" << '\n';
   reset_stack();
 }

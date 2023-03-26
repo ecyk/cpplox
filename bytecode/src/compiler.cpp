@@ -30,7 +30,7 @@ Compiler::Compiler(const std::string& source) : scanner_{source} {
   rules_[TOKEN_IDENTIFIER] = {&Compiler::variable, nullptr, PREC_NONE};
   rules_[TOKEN_STRING] = {&Compiler::string, nullptr, PREC_NONE};
   rules_[TOKEN_NUMBER] = {&Compiler::number, nullptr, PREC_NONE};
-  rules_[TOKEN_AND] = {nullptr, nullptr, PREC_NONE};
+  rules_[TOKEN_AND] = {nullptr, &Compiler::and_, PREC_AND};
   rules_[TOKEN_CLASS] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_ELSE] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_FALSE] = {&Compiler::literal, nullptr, PREC_NONE};
@@ -38,7 +38,7 @@ Compiler::Compiler(const std::string& source) : scanner_{source} {
   rules_[TOKEN_FUN] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_IF] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_NIL] = {&Compiler::literal, nullptr, PREC_NONE};
-  rules_[TOKEN_OR] = {nullptr, nullptr, PREC_NONE};
+  rules_[TOKEN_OR] = {nullptr, &Compiler::or_, PREC_OR};
   rules_[TOKEN_PRINT] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_RETURN] = {nullptr, nullptr, PREC_NONE};
   rules_[TOKEN_SUPER] = {nullptr, nullptr, PREC_NONE};
@@ -84,6 +84,36 @@ void Compiler::emit_constant(Value value) {
   emit_bytes(OP_CONSTANT, make_constant(value));
 }
 
+int Compiler::emit_jump(uint8_t instruction) {
+  emit_byte(instruction);
+  emit_byte(0xff);
+  emit_byte(0xff);
+  return current_chunk()->count() - 2;
+}
+
+void Compiler::patch_jump(int offset) {
+  const unsigned int jump = current_chunk()->count() - offset - 2;
+
+  if (jump > UINT16_MAX) {
+    error("Too much code to jump over.");
+  }
+
+  current_chunk()->set_code(offset, (jump >> 8U) & 0xFFU);
+  current_chunk()->set_code(offset + 1, jump & 0xFFU);
+}
+
+void Compiler::emit_loop(int loop_start) {
+  emit_byte(OP_LOOP);
+
+  const unsigned int offset = current_chunk()->count() - loop_start + 2;
+  if (offset > UINT16_MAX) {
+    error("Loop body too large.");
+  }
+
+  emit_byte((offset >> 8U) & 0xFFU);
+  emit_byte(offset & 0xFFU);
+}
+
 void Compiler::declaration() {
   if (match(TOKEN_VAR)) {
     var_declaration();
@@ -112,6 +142,12 @@ void Compiler::var_declaration() {
 void Compiler::statement() {
   if (match(TOKEN_PRINT)) {
     print_statement();
+  } else if (match(TOKEN_IF)) {
+    if_statement();
+  } else if (match(TOKEN_WHILE)) {
+    while_statement();
+  } else if (match(TOKEN_FOR)) {
+    for_statement();
   } else if (match(TOKEN_LEFT_BRACE)) {
     begin_scope();
     block_statement();
@@ -125,6 +161,88 @@ void Compiler::print_statement() {
   expression();
   consume(TOKEN_SEMICOLON, "Expect ';' after value.");
   emit_byte(OP_PRINT);
+}
+
+void Compiler::if_statement() {
+  consume(TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
+  expression();
+  consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+  const int then_jump = emit_jump(OP_JUMP_IF_FALSE);
+  emit_byte(OP_POP);
+  statement();
+
+  const int else_jump = emit_jump(OP_JUMP);
+
+  patch_jump(then_jump);
+  emit_byte(OP_POP);
+
+  if (match(TOKEN_ELSE)) {
+    statement();
+  }
+
+  patch_jump(else_jump);
+}
+
+void Compiler::while_statement() {
+  const int loop_start = current_chunk()->count();
+
+  consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
+  expression();
+  consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+  const int exit_jump = emit_jump(OP_JUMP_IF_FALSE);
+  emit_byte(OP_POP);
+  statement();
+  emit_loop(loop_start);
+
+  patch_jump(exit_jump);
+  emit_byte(OP_POP);
+}
+
+void Compiler::for_statement() {
+  begin_scope();
+  consume(TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
+
+  if (match(TOKEN_SEMICOLON)) {
+    // No initializer.
+  } else if (match(TOKEN_VAR)) {
+    var_declaration();
+  } else {
+    expression_statement();
+  }
+
+  int loop_start = current_chunk()->count();
+  int exit_jump = -1;
+  if (!match(TOKEN_SEMICOLON)) {
+    expression();
+    consume(TOKEN_SEMICOLON, "Expect ';' after loop condition.");
+
+    exit_jump = emit_jump(OP_JUMP_IF_FALSE);
+    emit_byte(OP_POP);
+  }
+
+  if (!match(TOKEN_RIGHT_PAREN)) {
+    const int body_jump = emit_jump(OP_JUMP);
+    const int increment_start = current_chunk()->count();
+    expression();
+    emit_byte(OP_POP);
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+
+    emit_loop(loop_start);
+    loop_start = increment_start;
+    patch_jump(body_jump);
+  }
+
+  statement();
+  emit_loop(loop_start);
+
+  if (exit_jump != -1) {
+    patch_jump(exit_jump);
+    emit_byte(OP_POP);
+  }
+
+  end_scope();
 }
 
 void Compiler::block_statement() {
@@ -142,6 +260,26 @@ void Compiler::expression_statement() {
 }
 
 void Compiler::expression() { parse_precedence(PREC_ASSIGNMENT); }
+
+void Compiler::and_(bool /*can_assign*/) {
+  const int end_jump = emit_jump(OP_JUMP_IF_FALSE);
+
+  emit_byte(OP_POP);
+  parse_precedence(PREC_AND);
+
+  patch_jump(end_jump);
+}
+
+void Compiler::or_(bool /*can_assign*/) {
+  const int elseJump = emit_jump(OP_JUMP_IF_FALSE);
+  const int endJump = emit_jump(OP_JUMP);
+
+  patch_jump(elseJump);
+  emit_byte(OP_POP);
+
+  parse_precedence(PREC_OR);
+  patch_jump(endJump);
+}
 
 void Compiler::binary(bool /*can_assign*/) {
   const TokenType op = previous_.type_;
