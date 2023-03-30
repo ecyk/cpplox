@@ -2,7 +2,7 @@
 
 #include <array>
 
-#include "chunk.hpp"
+#include "object.hpp"
 #include "scanner.hpp"
 
 namespace lox::bytecode {
@@ -34,32 +34,46 @@ class Compiler {
     int depth{};
   };
 
-  static constexpr int UINT8_COUNT = 256;
+  enum FunctionType { TYPE_FUNCTION, TYPE_SCRIPT };
+
+  static std::array<ParseRule, TOKEN_COUNT> rules;
+
+  inline static Token previous, current;
+  inline static bool had_error{};
+  inline static bool panic_mode{};
 
  public:
-  explicit Compiler(const std::string& source);
+  explicit Compiler(Scanner* scanner, FunctionType type = TYPE_SCRIPT,
+                    Compiler* enclosing = nullptr);
 
-  bool compile(Chunk& chunk);
+  ObjFunction* compile();
 
  private:
+  ObjFunction* end_compiler();
+
   void emit_byte(uint8_t byte);
   void emit_bytes(uint8_t byte1, uint8_t byte2);
   void emit_constant(Value value);
-  void emit_return() { emit_byte(OP_RETURN); }
+  void emit_return();
   int emit_jump(uint8_t instruction);
   void patch_jump(int offset);
   void emit_loop(int loop_start);
 
   void declaration();
+  void fun_declaration();
+  void function(FunctionType type);
   void var_declaration();
   void statement();
   void print_statement();
   void if_statement();
+  void return_statement();
   void while_statement();
   void for_statement();
   void block_statement();
   void expression_statement();
   void expression();
+  void call(bool can_assign);
+  uint8_t argument_list();
   void and_(bool can_assign);
   void or_(bool can_assign);
   void binary(bool can_assign);
@@ -75,43 +89,39 @@ class Compiler {
   void declare_variable();
   void define_variable(uint8_t global);
   int resolve_local(const Token& name);
-
   uint8_t make_constant(Value value);
   uint8_t identifier_constant(const Token& name);
   void add_local(const Token& name);
-  void mark_initialized() { locals_[local_count_ - 1].depth = scope_depth_; }
-
+  void mark_initialized();
   void begin_scope() { scope_depth_++; }
   void end_scope();
 
-  ParseRule* get_rule(TokenType type) { return &rules_[type]; }
+  Chunk* current_chunk() { return &function_->chunk; }
+
+  static ParseRule* get_rule(TokenType type) { return &rules[type]; }
   void parse_precedence(Precedence precedence);
 
   void advance();
   void consume(TokenType type, std::string_view message);
-  [[nodiscard]] bool check(TokenType type) const;
+  [[nodiscard]] static bool check(TokenType type) {
+    return current.type_ == type;
+  }
   bool match(TokenType type);
 
   void synchronize();
 
-  void error(std::string_view message);
-  void error_at_current(std::string_view message);
-  void error_at(const Token& token, std::string_view message);
+  static void error(std::string_view message);
+  static void error_at_current(std::string_view message);
+  static void error_at(const Token& token, std::string_view message);
 
-  Chunk* current_chunk() { return chunk_; }
+  ObjFunction* function_{};
+  FunctionType type_;
 
-  Scanner scanner_;
-
-  Token previous_, current_;
-  bool had_error_{};
-  bool panic_mode_{};
-
-  std::array<ParseRule, TOKEN_COUNT> rules_{};
-
-  std::array<Local, UINT8_COUNT> locals_{};
+  std::array<Local, UINT8_COUNT> locals_;
   int local_count_{};
   int scope_depth_{};
 
-  Chunk* chunk_{};
+  Compiler* enclosing_{};
+  Scanner* scanner_;
 };
 }  // namespace lox::bytecode

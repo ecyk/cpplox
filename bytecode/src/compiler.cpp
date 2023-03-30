@@ -3,56 +3,69 @@
 #include <iostream>
 #include <limits>
 
-#include "object.hpp"
 #include "vm.hpp"
 
 namespace lox::bytecode {
-Compiler::Compiler(const std::string& source) : scanner_{source} {
-  rules_[TOKEN_LEFT_PAREN] = {&Compiler::grouping, nullptr, PREC_NONE};
-  rules_[TOKEN_RIGHT_PAREN] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_LEFT_BRACE] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_RIGHT_BRACE] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_COMMA] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_DOT] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_MINUS] = {&Compiler::unary, &Compiler::binary, PREC_TERM};
-  rules_[TOKEN_PLUS] = {nullptr, &Compiler::binary, PREC_TERM};
-  rules_[TOKEN_SEMICOLON] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_SLASH] = {nullptr, &Compiler::binary, PREC_FACTOR};
-  rules_[TOKEN_STAR] = {nullptr, &Compiler::binary, PREC_FACTOR};
-  rules_[TOKEN_BANG] = {&Compiler::unary, nullptr, PREC_NONE};
-  rules_[TOKEN_BANG_EQUAL] = {nullptr, &Compiler::binary, PREC_EQUALITY};
-  rules_[TOKEN_EQUAL] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_EQUAL_EQUAL] = {nullptr, &Compiler::binary, PREC_EQUALITY};
-  rules_[TOKEN_GREATER] = {nullptr, &Compiler::binary, PREC_COMPARISON};
-  rules_[TOKEN_GREATER_EQUAL] = {nullptr, &Compiler::binary, PREC_COMPARISON};
-  rules_[TOKEN_LESS] = {nullptr, &Compiler::binary, PREC_COMPARISON};
-  rules_[TOKEN_LESS_EQUAL] = {nullptr, &Compiler::binary, PREC_COMPARISON};
-  rules_[TOKEN_IDENTIFIER] = {&Compiler::variable, nullptr, PREC_NONE};
-  rules_[TOKEN_STRING] = {&Compiler::string, nullptr, PREC_NONE};
-  rules_[TOKEN_NUMBER] = {&Compiler::number, nullptr, PREC_NONE};
-  rules_[TOKEN_AND] = {nullptr, &Compiler::and_, PREC_AND};
-  rules_[TOKEN_CLASS] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_ELSE] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_FALSE] = {&Compiler::literal, nullptr, PREC_NONE};
-  rules_[TOKEN_FOR] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_FUN] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_IF] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_NIL] = {&Compiler::literal, nullptr, PREC_NONE};
-  rules_[TOKEN_OR] = {nullptr, &Compiler::or_, PREC_OR};
-  rules_[TOKEN_PRINT] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_RETURN] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_SUPER] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_THIS] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_TRUE] = {&Compiler::literal, nullptr, PREC_NONE};
-  rules_[TOKEN_VAR] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_WHILE] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_ERROR] = {nullptr, nullptr, PREC_NONE};
-  rules_[TOKEN_EOF] = {nullptr, nullptr, PREC_NONE};
+std::array<Compiler::ParseRule, TOKEN_COUNT> Compiler::rules{{
+    {&Compiler::grouping, &Compiler::call,
+     Compiler::PREC_CALL},                    // TOKEN_LEFT_PAREN
+    {nullptr, nullptr, Compiler::PREC_NONE},  // TOKEN_RIGHT_PAREN
+    {nullptr, nullptr, Compiler::PREC_NONE},  // TOKEN_LEFT_BRACE
+    {nullptr, nullptr, Compiler::PREC_NONE},  // TOKEN_RIGHT_BRACE
+    {nullptr, nullptr, Compiler::PREC_NONE},  // TOKEN_COMMA
+    {nullptr, nullptr, Compiler::PREC_NONE},  // TOKEN_DOT
+    {&Compiler::unary, &Compiler::binary, Compiler::PREC_TERM},  // TOKEN_MINUS
+    {nullptr, &Compiler::binary, Compiler::PREC_TERM},           // TOKEN_PLUS
+    {nullptr, nullptr, Compiler::PREC_NONE},                // TOKEN_SEMICOLON
+    {nullptr, &Compiler::binary, Compiler::PREC_FACTOR},    // TOKEN_SLASH
+    {nullptr, &Compiler::binary, Compiler::PREC_FACTOR},    // TOKEN_STAR
+    {&Compiler::unary, nullptr, Compiler::PREC_NONE},       // TOKEN_BANG
+    {nullptr, &Compiler::binary, Compiler::PREC_EQUALITY},  // TOKEN_BANG_EQUAL
+    {nullptr, nullptr, Compiler::PREC_NONE},                // TOKEN_EQUAL
+    {nullptr, &Compiler::binary, Compiler::PREC_EQUALITY},  // TOKEN_EQUAL_EQUAL
+    {nullptr, &Compiler::binary, Compiler::PREC_COMPARISON},  // TOKEN_GREATER
+    {nullptr, &Compiler::binary,
+     Compiler::PREC_COMPARISON},  // TOKEN_GREATER_EQUAL
+    {nullptr, &Compiler::binary, Compiler::PREC_COMPARISON},  // TOKEN_LESS
+    {nullptr, &Compiler::binary,
+     Compiler::PREC_COMPARISON},                          // TOKEN_LESS_EQUAL
+    {&Compiler::variable, nullptr, Compiler::PREC_NONE},  // TOKEN_IDENTIFIER
+    {&Compiler::string, nullptr, Compiler::PREC_NONE},    // TOKEN_STRING
+    {&Compiler::number, nullptr, Compiler::PREC_NONE},    // TOKEN_NUMBER
+    {nullptr, &Compiler::and_, Compiler::PREC_AND},       // TOKEN_AND
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_CLASS
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_ELSE
+    {&Compiler::literal, nullptr, Compiler::PREC_NONE},   // TOKEN_FALSE
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_FOR
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_FUN
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_IF
+    {&Compiler::literal, nullptr, Compiler::PREC_NONE},   // TOKEN_NIL
+    {nullptr, &Compiler::or_, Compiler::PREC_OR},         // TOKEN_OR
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_PRINT
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_RETURN
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_SUPER
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_THIS
+    {&Compiler::literal, nullptr, Compiler::PREC_NONE},   // TOKEN_TRUE
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_VAR
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_WHILE
+    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_ERROR
+    {nullptr, nullptr, Compiler::PREC_NONE}               // TOKEN_EOF
+}};
+
+Compiler::Compiler(Scanner* scanner, FunctionType type, Compiler* enclosing)
+    : scanner_{scanner},
+      type_{type},
+      enclosing_{enclosing},
+      function_{AS_FUNCTION(VM::allocate_object<ObjFunction>())} {
+  if (type != TYPE_SCRIPT) {
+    function_->name =
+        AS_STRING(VM::allocate_object<ObjString>(previous.lexeme_));
+  }
+
+  local_count_++;
 }
 
-bool Compiler::compile(Chunk& chunk) {
-  chunk_ = &chunk;
-
+ObjFunction* Compiler::compile() {
   advance();
 
   while (!match(TOKEN_EOF)) {
@@ -60,19 +73,23 @@ bool Compiler::compile(Chunk& chunk) {
   }
 
   consume(TOKEN_EOF, "Expect end of expression.");
+  return end_compiler();
+}
 
+ObjFunction* Compiler::end_compiler() {
   emit_return();
 #ifdef DEBUG_PRINT_CODE
-  if (!had_error_) {
-    current_chunk()->disassemble("code");
+  if (!had_error) {
+    current_chunk()->disassemble(
+        function_->name != nullptr ? function_->name->string : "<script>");
   }
 #endif
 
-  return !had_error_;
+  return had_error ? nullptr : function_;
 }
 
 void Compiler::emit_byte(uint8_t byte) {
-  current_chunk()->write(byte, previous_.line_);
+  current_chunk()->write(byte, previous.line_);
 }
 
 void Compiler::emit_bytes(uint8_t byte1, uint8_t byte2) {
@@ -82,6 +99,11 @@ void Compiler::emit_bytes(uint8_t byte1, uint8_t byte2) {
 
 void Compiler::emit_constant(Value value) {
   emit_bytes(OP_CONSTANT, make_constant(value));
+}
+
+void Compiler::emit_return() {
+  emit_byte(OP_NIL);
+  emit_byte(OP_RETURN);
 }
 
 int Compiler::emit_jump(uint8_t instruction) {
@@ -115,15 +137,47 @@ void Compiler::emit_loop(int loop_start) {
 }
 
 void Compiler::declaration() {
-  if (match(TOKEN_VAR)) {
+  if (match(TOKEN_FUN)) {
+    fun_declaration();
+  } else if (match(TOKEN_VAR)) {
     var_declaration();
   } else {
     statement();
   }
 
-  if (panic_mode_) {
+  if (panic_mode) {
     synchronize();
   }
+}
+
+void Compiler::fun_declaration() {
+  const uint8_t global = parse_variable("Expect function name.");
+  mark_initialized();
+  function(TYPE_FUNCTION);
+  define_variable(global);
+}
+
+void Compiler::function(FunctionType type) {
+  Compiler compiler{scanner_, type, this};
+  compiler.begin_scope();
+
+  compiler.consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.");
+  if (!compiler.check(TOKEN_RIGHT_PAREN)) {
+    do {
+      if (++compiler.function_->arity > 255) {
+        compiler.error_at_current("Can't have more than 255 parameters.");
+      }
+      const uint8_t constant =
+          compiler.parse_variable("Expect parameter name.");
+      compiler.define_variable(constant);
+    } while (compiler.match(TOKEN_COMMA));
+  }
+  compiler.consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+  compiler.consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+  compiler.block_statement();
+
+  ObjFunction* function = compiler.end_compiler();
+  emit_bytes(OP_CONSTANT, make_constant(Value{function}));
 }
 
 void Compiler::var_declaration() {
@@ -144,6 +198,8 @@ void Compiler::statement() {
     print_statement();
   } else if (match(TOKEN_IF)) {
     if_statement();
+  } else if (match(TOKEN_RETURN)) {
+    return_statement();
   } else if (match(TOKEN_WHILE)) {
     while_statement();
   } else if (match(TOKEN_FOR)) {
@@ -182,6 +238,20 @@ void Compiler::if_statement() {
   }
 
   patch_jump(else_jump);
+}
+
+void Compiler::return_statement() {
+  if (type_ == TYPE_SCRIPT) {
+    error("Can't return from top-level code.");
+  }
+
+  if (match(TOKEN_SEMICOLON)) {
+    emit_return();
+  } else {
+    expression();
+    consume(TOKEN_SEMICOLON, "Expect ';' after return value.");
+    emit_byte(OP_RETURN);
+  }
 }
 
 void Compiler::while_statement() {
@@ -261,6 +331,26 @@ void Compiler::expression_statement() {
 
 void Compiler::expression() { parse_precedence(PREC_ASSIGNMENT); }
 
+void Compiler::call(bool /*can_assign*/) {
+  const uint8_t arg_count = argument_list();
+  emit_bytes(OP_CALL, arg_count);
+}
+
+uint8_t Compiler::argument_list() {
+  uint8_t arg_count = 0;
+  if (!check(TOKEN_RIGHT_PAREN)) {
+    do {
+      expression();
+      if (arg_count == 255) {
+        error("Can't have more than 255 arguments.");
+      }
+      arg_count++;
+    } while (match(TOKEN_COMMA));
+  }
+  consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+  return arg_count;
+}
+
 void Compiler::and_(bool /*can_assign*/) {
   const int end_jump = emit_jump(OP_JUMP_IF_FALSE);
 
@@ -282,7 +372,7 @@ void Compiler::or_(bool /*can_assign*/) {
 }
 
 void Compiler::binary(bool /*can_assign*/) {
-  const TokenType op = previous_.type_;
+  const TokenType op = previous.type_;
   parse_precedence(static_cast<Precedence>(get_rule(op)->precedence + 1));
 
   switch (op) {
@@ -322,7 +412,7 @@ void Compiler::binary(bool /*can_assign*/) {
 }
 
 void Compiler::unary(bool /*can_assign*/) {
-  const TokenType op = previous_.type_;
+  const TokenType op = previous.type_;
   parse_precedence(PREC_UNARY);
 
   switch (op) {
@@ -343,7 +433,7 @@ void Compiler::grouping(bool /*can_assign*/) {
 }
 
 void Compiler::literal(bool /*can_assign*/) {
-  switch (previous_.type_) {
+  switch (previous.type_) {
     case TOKEN_FALSE:
       emit_byte(OP_FALSE);
       break;
@@ -359,13 +449,13 @@ void Compiler::literal(bool /*can_assign*/) {
 }
 
 void Compiler::string(bool /*can_assign*/) {
-  previous_.lexeme_.remove_prefix(1);
-  previous_.lexeme_.remove_suffix(1);
-  emit_constant(VM::allocate_object<ObjString>(previous_.lexeme_));
+  previous.lexeme_.remove_prefix(1);
+  previous.lexeme_.remove_suffix(1);
+  emit_constant(VM::allocate_object<ObjString>(previous.lexeme_));
 }
 
 void Compiler::variable(bool can_assign) {
-  named_variable(previous_, can_assign);
+  named_variable(previous, can_assign);
 }
 
 void Compiler::named_variable(const Token& name, bool can_assign) {
@@ -389,7 +479,7 @@ void Compiler::named_variable(const Token& name, bool can_assign) {
 }
 
 void Compiler::number(bool /*can_assign*/) {
-  const double value = strtod(previous_.lexeme_.data(), nullptr);
+  const double value = strtod(previous.lexeme_.data(), nullptr);
   emit_constant(Value{value});
 }
 
@@ -401,7 +491,7 @@ uint8_t Compiler::parse_variable(std::string_view error_message) {
     return 0;
   }
 
-  return identifier_constant(previous_);
+  return identifier_constant(previous);
 }
 
 void Compiler::declare_variable() {
@@ -415,12 +505,12 @@ void Compiler::declare_variable() {
       break;
     }
 
-    if (previous_.lexeme_ == local.name.lexeme_) {
+    if (previous.lexeme_ == local.name.lexeme_) {
       error("Already a variable with this name in this scope.");
     }
   }
 
-  add_local(previous_);
+  add_local(previous);
 }
 
 void Compiler::define_variable(uint8_t global) {
@@ -471,6 +561,14 @@ void Compiler::add_local(const Token& name) {
   local.depth = -1;
 }
 
+void Compiler::mark_initialized() {
+  if (scope_depth_ == 0) {
+    return;
+  }
+
+  locals_[local_count_ - 1].depth = scope_depth_;
+}
+
 void Compiler::end_scope() {
   scope_depth_--;
   while (local_count_ > 0 && locals_[local_count_ - 1].depth > scope_depth_) {
@@ -481,7 +579,7 @@ void Compiler::end_scope() {
 
 void Compiler::parse_precedence(Precedence precedence) {
   advance();
-  const ParseFn prefix_rule = get_rule(previous_.type_)->prefix;
+  const ParseFn prefix_rule = get_rule(previous.type_)->prefix;
   if (prefix_rule == nullptr) {
     error("Expect expression.");
     return;
@@ -490,9 +588,9 @@ void Compiler::parse_precedence(Precedence precedence) {
   const bool can_assign = precedence <= PREC_ASSIGNMENT;
   (this->*prefix_rule)(can_assign);
 
-  while (precedence <= get_rule(current_.type_)->precedence) {
+  while (precedence <= get_rule(current.type_)->precedence) {
     advance();
-    const ParseFn infix_rule = get_rule(previous_.type_)->infix;
+    const ParseFn infix_rule = get_rule(previous.type_)->infix;
     (this->*infix_rule)(can_assign);
   }
 
@@ -502,15 +600,15 @@ void Compiler::parse_precedence(Precedence precedence) {
 }
 
 void Compiler::advance() {
-  previous_ = current_;
+  previous = current;
 
   for (;;) {
-    current_ = scanner_.scan_token();
-    if (current_.type_ != TOKEN_ERROR) {
+    current = scanner_->scan_token();
+    if (current.type_ != TOKEN_ERROR) {
       break;
     }
 
-    error_at_current(current_.lexeme_);
+    error_at_current(current.lexeme_);
   }
 }
 
@@ -523,8 +621,6 @@ void Compiler::consume(TokenType type, std::string_view message) {
   error_at_current(message);
 }
 
-bool Compiler::check(TokenType type) const { return current_.type_ == type; }
-
 bool Compiler::match(TokenType type) {
   if (!check(type)) {
     return false;
@@ -535,13 +631,13 @@ bool Compiler::match(TokenType type) {
 }
 
 void Compiler::synchronize() {
-  panic_mode_ = false;
+  panic_mode = false;
 
-  while (current_.type_ != TOKEN_EOF) {
-    if (previous_.type_ == TOKEN_SEMICOLON) {
+  while (current.type_ != TOKEN_EOF) {
+    if (previous.type_ == TOKEN_SEMICOLON) {
       return;
     }
-    switch (current_.type_) {
+    switch (current.type_) {
       case TOKEN_CLASS:
       case TOKEN_FUN:
       case TOKEN_VAR:
@@ -559,17 +655,17 @@ void Compiler::synchronize() {
   }
 }
 
-void Compiler::error(std::string_view message) { error_at(previous_, message); }
+void Compiler::error(std::string_view message) { error_at(previous, message); }
 
 void Compiler::error_at_current(std::string_view message) {
-  error_at(current_, message);
+  error_at(current, message);
 }
 
 void Compiler::error_at(const Token& token, std::string_view message) {
-  if (panic_mode_) {
+  if (panic_mode) {
     return;
   }
-  panic_mode_ = true;
+  panic_mode = true;
   std::cerr << "[line " << token.line_ << "] Error";
 
   if (token.type_ == TOKEN_EOF) {
@@ -581,6 +677,6 @@ void Compiler::error_at(const Token& token, std::string_view message) {
   }
 
   std::cerr << ": " << message << '\n';
-  had_error_ = true;
+  had_error = true;
 }
 }  // namespace lox::bytecode

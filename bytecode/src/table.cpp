@@ -1,5 +1,7 @@
 #include "table.hpp"
 
+#include "object.hpp"
+
 namespace lox::bytecode {
 bool Table::set(ObjString* key, Value value) {
   if (size_ + 1 > static_cast<int>(static_cast<float>(capacity_) * MAX_LOAD)) {
@@ -55,12 +57,11 @@ void Table::add_all(Table& to) const {
   }
 }
 
-ObjString* Table::find_string(std::string_view string) const {
+ObjString* Table::find_string(std::string_view string, uint32_t hash) const {
   if (size_ == 0) {
     return nullptr;
   }
 
-  const uint32_t hash = ::hash(string);
   uint32_t index = hash % capacity_;
   for (;;) {
     Entry* entry = &entries_[index];

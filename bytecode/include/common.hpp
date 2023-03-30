@@ -4,8 +4,10 @@
 #include <string>
 #include <vector>
 
-#define DEBUG_PRINT_CODE
-#define DEBUG_TRACE_EXECUTION
+// #define DEBUG_PRINT_CODE
+// #define DEBUG_TRACE_EXECUTION
+
+inline static constexpr int UINT8_COUNT = 256;
 
 inline uint32_t hash(std::string_view key) {
   uint32_t hash = 2166136261;

@@ -1,8 +1,10 @@
 #pragma once
 
-#include "object.hpp"
+#include "value.hpp"
 
 namespace lox::bytecode {
+struct ObjString;
+
 struct Entry {
   ObjString* key{};
   Value value;
@@ -22,7 +24,8 @@ class Table {
   bool del(ObjString* key);
 
   void add_all(Table& to) const;
-  [[nodiscard]] ObjString* find_string(std::string_view string) const;
+  [[nodiscard]] ObjString* find_string(std::string_view string,
+                                       uint32_t hash) const;
 
  private:
   static Entry* find_entry(const Entries& entries, int capacity,

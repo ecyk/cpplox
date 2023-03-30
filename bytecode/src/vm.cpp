@@ -1,10 +1,18 @@
 #include "vm.hpp"
 
+#include <chrono>
 #include <iostream>
 
-#include "object.hpp"
-
 namespace lox::bytecode {
+Value clock_native(int /*arg_count*/, Value* /*args*/) {
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                .count();
+
+  constexpr double ms_to_seconds = 1.0 / 1000;
+  return Value{static_cast<double>(ms) * ms_to_seconds};
+}
+
 void VM::clean_objects() {
   Obj* object = objects;
   while (object != nullptr) {
@@ -15,11 +23,26 @@ void VM::clean_objects() {
   objects = nullptr;
 }
 
-InterpretResult VM::interpret(const Chunk& chunk) {
-  chunk_ = &chunk;
-  ip_ = chunk.get_code(0);
+VM::VM() {
   reset_stack();
+  define_native("clock", clock_native);
+}
+
+InterpretResult VM::interpret(ObjFunction* function) {
+  reset_stack();
+
+  push(Value{function});
+  call(function, 0);
+
   return run();
+}
+
+void VM::define_native(std::string_view name, NativeFn function) {
+  push(Value{allocate_object<ObjString>(name)});
+  push(Value{allocate_object<ObjNative>(function)});
+  globals.set(AS_STRING(stack_[0]), stack_[1]);
+  pop();
+  pop();
 }
 
 InterpretResult VM::run() {
@@ -34,6 +57,8 @@ InterpretResult VM::run() {
     push(Value{a op b});                              \
   } while (false)
 
+  frame_top_ = &frames_[frame_count_ - 1];
+
   for (;;) {
 #ifdef DEBUG_TRACE_EXECUTION
     std::cout << "          ";
@@ -43,8 +68,8 @@ InterpretResult VM::run() {
       std::cout << " ]";
     }
     std::cout << '\n';
-    chunk_->disassemble_instruction(
-        static_cast<int>(ip_ - chunk_->get_code(0)));
+    frame_top_->function->chunk.disassemble_instruction(static_cast<int>(
+        frame_top_->ip - frame_top_->function->chunk.get_code(0)));
 #endif
 
     switch (const uint8_t instruction = read_byte()) {
@@ -65,12 +90,12 @@ InterpretResult VM::run() {
         break;
       case OP_GET_LOCAL: {
         const uint8_t slot = read_byte();
-        push(stack_[slot]);
+        push(frame_top_->slots[slot]);  // problem is here +1 acceptable
         break;
       }
       case OP_SET_LOCAL: {
         const uint8_t slot = read_byte();
-        stack_[slot] = peek(0);
+        frame_top_->slots[slot] = peek(0);
         break;
       }
       case OP_GET_GLOBAL: {
@@ -149,29 +174,85 @@ InterpretResult VM::run() {
         break;
       case OP_JUMP: {
         const uint16_t offset = read_short();
-        ip_ += offset;
+        frame_top_->ip += offset;
         break;
       }
       case OP_JUMP_IF_FALSE: {
         const uint16_t offset = read_short();
         if (peek(0).is_falsey()) {
-          ip_ += offset;
+          frame_top_->ip += offset;
         }
         break;
       }
       case OP_LOOP: {
         const uint16_t offset = read_short();
-        ip_ -= offset;
+        frame_top_->ip -= offset;
         break;
       }
-      case OP_RETURN:
-        return INTERPRET_OK;
+      case OP_CALL: {
+        const int arg_count = read_byte();
+        if (!call_value(peek(arg_count), arg_count)) {
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        frame_top_ = &frames_[frame_count_ - 1];
+        break;
+      }
+      case OP_RETURN: {
+        const Value result = pop();
+        if (--frame_count_ == 0) {
+          pop();
+          return INTERPRET_OK;
+        }
+        stack_top_ = frame_top_->slots;
+        push(result);
+        frame_top_ = &frames_[frame_count_ - 1];
+        break;
+      }
       default:
         break;
     }
   }
 
 #undef BINARY_OP
+}
+
+bool VM::call_value(Value callee, int arg_count) {
+  if (IS_OBJ(callee)) {
+    switch (OBJ_TYPE(callee)) {
+      case OBJ_FUNCTION:
+        return call(AS_FUNCTION(callee), arg_count);
+      case OBJ_NATIVE: {
+        NativeFn native = AS_NATIVE(callee);
+        const Value result = native(arg_count, stack_top_ - arg_count);
+        stack_top_ -= arg_count + 1;
+        push(result);
+        return true;
+      }
+      default:
+        break;
+    }
+  }
+  runtime_error("Can only call functions and classes.");
+  return false;
+}
+
+bool VM::call(ObjFunction* function, int arg_count) {
+  if (arg_count != function->arity) {
+    runtime_error("Expected " + std::to_string(function->arity) +
+                  " arguments but got " + std::to_string(arg_count) + ".");
+    return false;
+  }
+
+  if (frame_count_ == FRAMES_MAX) {
+    runtime_error("Stack overflow.");
+    return false;
+  }
+
+  CallFrame* frame = &frames_[frame_count_++];
+  frame->function = function;
+  frame->ip = function->chunk.get_code(0);
+  frame->slots = stack_top_ - arg_count - 1;
+  return true;
 }
 
 void VM::reset_stack() {
@@ -182,9 +263,18 @@ void VM::reset_stack() {
 void VM::runtime_error(const std::string& message) {
   std::cerr << message << '\n';
 
-  const int instruction = ip_ - chunk_->get_code(0) - 1;
-  const int line = chunk_->get_line(instruction);
-  std::cerr << "[line " << line << "] in script" << '\n';
+  for (int i = frame_count_ - 1; i >= 0; i--) {
+    CallFrame* frame = &frames_[i];
+    ObjFunction* function = frame->function;
+    const int instruction = frame->ip - function->chunk.get_code(0) - 1;
+    std::cerr << "[line " << function->chunk.get_line(instruction) << "] in ";
+    if (function->name == nullptr) {
+      std::cerr << "script\n";
+    } else {
+      std::cerr << function->name->string << "()\n";
+    }
+  }
+
   reset_stack();
 }
 }  // namespace lox::bytecode

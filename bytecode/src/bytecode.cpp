@@ -8,15 +8,16 @@
 
 namespace lox::bytecode {
 static InterpretResult run(const std::string& source) {
-  Chunk chunk;
+  Scanner scanner{source};
 
-  Compiler compiler{source};
-  if (!compiler.compile(chunk)) {
+  Compiler compiler{&scanner};
+  ObjFunction* function = compiler.compile();
+  if (function == nullptr) {
     return INTERPRET_COMPILE_ERROR;
   }
 
   VM vm;
-  return vm.interpret(chunk);
+  return vm.interpret(function);
 }
 
 int run_file(const std::string& path) {

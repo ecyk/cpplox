@@ -14,11 +14,25 @@ void Value::print() const {
     case VAL_NIL:
       std::cout << "nil";
       break;
-    case VAL_NUMBER:
-      std::cout << AS_NUMBER(*this);
+    case VAL_NUMBER: {
+      std::string number = std::to_string(AS_NUMBER(*this));
+      number.erase(number.find_last_not_of('0') + 1, std::string::npos);
+      number.erase(number.find_last_not_of('.') + 1, std::string::npos);
+      std::cout << number;
       break;
+    }
     case VAL_OBJ:
       switch (OBJ_TYPE(*this)) {
+        case OBJ_FUNCTION:
+          if (AS_FUNCTION(*this)->name == nullptr) {
+            std::cout << "<script>";
+            return;
+          }
+          std::cout << "<fn " << AS_FUNCTION(*this)->name->string << ">";
+          break;
+        case OBJ_NATIVE:
+          std::cout << "<native fn>";
+          break;
         case OBJ_STRING:
           std::cout << AS_STRING(*this)->string;
           break;
