@@ -56,10 +56,9 @@ Compiler::Compiler(Scanner* scanner, FunctionType type, Compiler* enclosing)
     : scanner_{scanner},
       type_{type},
       enclosing_{enclosing},
-      function_{AS_FUNCTION(VM::allocate_object<ObjFunction>())} {
+      function_{VM::allocate_object<ObjFunction>()} {
   if (type != TYPE_SCRIPT) {
-    function_->name =
-        AS_STRING(VM::allocate_object<ObjString>(previous.lexeme_));
+    function_->name = VM::allocate_object<ObjString>(previous.lexeme_);
   }
 
   local_count_++;
@@ -177,7 +176,16 @@ void Compiler::function(FunctionType type) {
   compiler.block_statement();
 
   ObjFunction* function = compiler.end_compiler();
-  emit_bytes(OP_CONSTANT, make_constant(Value{function}));
+  if (function == nullptr) {
+    return;
+  }
+
+  emit_bytes(OP_CLOSURE, make_constant(Value{function}));
+
+  for (int i = 0; i < function->upvalue_count; i++) {
+    emit_byte(compiler.upvalues_[i].is_local ? 1 : 0);
+    emit_byte(compiler.upvalues_[i].index);
+  }
 }
 
 void Compiler::var_declaration() {
@@ -451,7 +459,7 @@ void Compiler::literal(bool /*can_assign*/) {
 void Compiler::string(bool /*can_assign*/) {
   previous.lexeme_.remove_prefix(1);
   previous.lexeme_.remove_suffix(1);
-  emit_constant(VM::allocate_object<ObjString>(previous.lexeme_));
+  emit_constant(Value{VM::allocate_object<ObjString>(previous.lexeme_)});
 }
 
 void Compiler::variable(bool can_assign) {
@@ -466,6 +474,9 @@ void Compiler::named_variable(const Token& name, bool can_assign) {
   if (arg != -1) {
     get_op = OP_GET_LOCAL;
     set_op = OP_SET_LOCAL;
+  } else if ((arg = resolve_upvalue(name)) != -1) {
+    get_op = OP_GET_UPVALUE;
+    set_op = OP_SET_UPVALUE;
   } else {
     arg = identifier_constant(name);
   }
@@ -536,18 +547,23 @@ int Compiler::resolve_local(const Token& name) {
   return -1;
 }
 
-uint8_t Compiler::make_constant(Value value) {
-  const int index = current_chunk()->add_constant(value);
-  if (index > std::numeric_limits<uint8_t>::max()) {
-    error("Too many constants in one chunk.");
-    return 0;
+int Compiler::resolve_upvalue(const Token& name) {
+  if (enclosing_ == nullptr) {
+    return -1;
   }
 
-  return static_cast<uint8_t>(index);
-}
+  const int local = enclosing_->resolve_local(name);
+  if (local != -1) {
+    enclosing_->locals_[local].is_captured = true;
+    return add_upvalue(local, true);
+  }
 
-uint8_t Compiler::identifier_constant(const Token& name) {
-  return make_constant(VM::allocate_object<ObjString>(name.lexeme_));
+  const int upvalue = enclosing_->resolve_upvalue(name);
+  if (upvalue != -1) {
+    return add_upvalue(upvalue, false);
+  }
+
+  return -1;
 }
 
 void Compiler::add_local(const Token& name) {
@@ -561,6 +577,26 @@ void Compiler::add_local(const Token& name) {
   local.depth = -1;
 }
 
+int Compiler::add_upvalue(uint8_t index, bool is_local) {
+  const int upvalue_count = function_->upvalue_count;
+
+  for (int i = 0; i < upvalue_count; i++) {
+    Upvalue* upvalue = &upvalues_[i];
+    if (upvalue->index == index && upvalue->is_local == is_local) {
+      return i;
+    }
+  }
+
+  if (upvalue_count == UINT8_COUNT) {
+    error("Too many closure variables in function.");
+    return 0;
+  }
+
+  upvalues_[upvalue_count].is_local = is_local;
+  upvalues_[upvalue_count].index = index;
+  return function_->upvalue_count++;
+}
+
 void Compiler::mark_initialized() {
   if (scope_depth_ == 0) {
     return;
@@ -569,10 +605,28 @@ void Compiler::mark_initialized() {
   locals_[local_count_ - 1].depth = scope_depth_;
 }
 
+uint8_t Compiler::make_constant(Value value) {
+  const int index = current_chunk()->add_constant(value);
+  if (index > std::numeric_limits<uint8_t>::max()) {
+    error("Too many constants in one chunk.");
+    return 0;
+  }
+
+  return static_cast<uint8_t>(index);
+}
+
+uint8_t Compiler::identifier_constant(const Token& name) {
+  return make_constant(Value{VM::allocate_object<ObjString>(name.lexeme_)});
+}
+
 void Compiler::end_scope() {
   scope_depth_--;
   while (local_count_ > 0 && locals_[local_count_ - 1].depth > scope_depth_) {
-    emit_byte(OP_POP);
+    if (locals_[local_count_ - 1].is_captured) {
+      emit_byte(OP_CLOSE_UPVALUE);
+    } else {
+      emit_byte(OP_POP);
+    }
     local_count_--;
   }
 }

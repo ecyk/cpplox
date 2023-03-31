@@ -56,7 +56,7 @@ Token Scanner::scan_token() {
 
   const char c = advance();
 
-  if (std::isalpha(c) != 0) {
+  if (std::isalpha(c) != 0 || c == '_') {
     return identifier();
   }
   if (std::isdigit(c) != 0) {
@@ -104,7 +104,8 @@ Token Scanner::scan_token() {
 }
 
 Token Scanner::identifier() {
-  while ((std::isalpha(peek()) != 0) || (std::isdigit(peek()) != 0)) {
+  while ((std::isalpha(peek()) != 0) || (std::isdigit(peek()) != 0) ||
+         (peek() == '_')) {
     advance();
   }
   return make_token(identifier_type());

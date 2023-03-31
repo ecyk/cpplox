@@ -14,7 +14,7 @@ enum InterpretResult {
 
 class VM {
   struct CallFrame {
-    ObjFunction* function{};
+    ObjClosure* closure{};
     const uint8_t* ip{};
     Value* slots{};
   };
@@ -23,12 +23,13 @@ class VM {
   static constexpr int STACK_MAX = FRAMES_MAX * UINT8_COUNT;
 
   inline static Obj* objects{};
+  inline static ObjUpvalue* open_upvalues{};
   inline static Table globals;
   inline static Table strings;
 
  public:
   template <typename ObjT, typename... Args>
-  static Value allocate_object(Args&&... args) {
+  static ObjT* allocate_object(Args&&... args) {
     ObjT* object{};
     if constexpr (std::is_same_v<ObjT, ObjString>) {
       const uint32_t hash = ::hash({std::forward<Args>(args)...});
@@ -36,22 +37,22 @@ class VM {
           strings.find_string({std::forward<Args>(args)...}, hash);
 
       if (interned != nullptr) {
-        return Value{interned};
+        return interned;
       }
 
-      object = new ObjString{{std::forward<Args>(args)...}, hash};
+      object = new ObjString{std::string{std::forward<Args>(args)...}, hash};
     } else {
       object = new ObjT{std::forward<Args>(args)...};
     }
 
-    object->next = objects;
+    object->next_object = objects;
     objects = object;
 
     if constexpr (std::is_same_v<ObjT, ObjString>) {
       strings.set(object, {});
     }
 
-    return Value{object};
+    return object;
   }
 
   static void clean_objects();
@@ -66,7 +67,10 @@ class VM {
   InterpretResult run();
 
   bool call_value(Value callee, int arg_count);
-  bool call(ObjFunction* function, int arg_count);
+  bool call(ObjClosure* closure, int arg_count);
+
+  static ObjUpvalue* capture_upvalue(Value* local);
+  static void close_upvalues(Value* last);
 
   void reset_stack();
   void push(Value value) { *stack_top_++ = value; }
@@ -79,7 +83,7 @@ class VM {
                 *(frame_top_->ip - 1));
   }
   Value read_constant() {
-    return frame_top_->function->chunk.get_constant(read_byte());
+    return frame_top_->closure->function->chunk.get_constant(read_byte());
   }
 
   void runtime_error(const std::string& message);

@@ -32,6 +32,12 @@ class Compiler {
   struct Local {
     Token name;
     int depth{};
+    bool is_captured{};
+  };
+
+  struct Upvalue {
+    uint8_t index{};
+    bool is_local{};
   };
 
   enum FunctionType { TYPE_FUNCTION, TYPE_SCRIPT };
@@ -89,10 +95,12 @@ class Compiler {
   void declare_variable();
   void define_variable(uint8_t global);
   int resolve_local(const Token& name);
+  int resolve_upvalue(const Token& name);
+  void add_local(const Token& name);
+  int add_upvalue(uint8_t index, bool is_local);
+  void mark_initialized();
   uint8_t make_constant(Value value);
   uint8_t identifier_constant(const Token& name);
-  void add_local(const Token& name);
-  void mark_initialized();
   void begin_scope() { scope_depth_++; }
   void end_scope();
 
@@ -119,6 +127,7 @@ class Compiler {
 
   std::array<Local, UINT8_COUNT> locals_;
   int local_count_{};
+  std::array<Upvalue, UINT8_COUNT> upvalues_;
   int scope_depth_{};
 
   Compiler* enclosing_{};

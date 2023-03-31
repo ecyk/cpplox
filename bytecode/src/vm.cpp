@@ -4,7 +4,7 @@
 #include <iostream>
 
 namespace lox::bytecode {
-Value clock_native(int /*arg_count*/, Value* /*args*/) {
+static Value clock_native(int /*arg_count*/, Value* /*args*/) {
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch())
                 .count();
@@ -16,9 +16,9 @@ Value clock_native(int /*arg_count*/, Value* /*args*/) {
 void VM::clean_objects() {
   Obj* object = objects;
   while (object != nullptr) {
-    Obj* next = object->next;
+    Obj* next_object = object->next_object;
     delete object;
-    object = next;
+    object = next_object;
   }
   objects = nullptr;
 }
@@ -32,7 +32,10 @@ InterpretResult VM::interpret(ObjFunction* function) {
   reset_stack();
 
   push(Value{function});
-  call(function, 0);
+  auto* closure = allocate_object<ObjClosure>(function);
+  pop();
+  push(Value{closure});
+  call(closure, 0);
 
   return run();
 }
@@ -68,8 +71,9 @@ InterpretResult VM::run() {
       std::cout << " ]";
     }
     std::cout << '\n';
-    frame_top_->function->chunk.disassemble_instruction(static_cast<int>(
-        frame_top_->ip - frame_top_->function->chunk.get_code(0)));
+    frame_top_->closure->function->chunk.disassemble_instruction(
+        static_cast<int>(frame_top_->ip -
+                         frame_top_->closure->function->chunk.get_code(0)));
 #endif
 
     switch (const uint8_t instruction = read_byte()) {
@@ -90,7 +94,7 @@ InterpretResult VM::run() {
         break;
       case OP_GET_LOCAL: {
         const uint8_t slot = read_byte();
-        push(frame_top_->slots[slot]);  // problem is here +1 acceptable
+        push(frame_top_->slots[slot]);
         break;
       }
       case OP_SET_LOCAL: {
@@ -123,6 +127,16 @@ InterpretResult VM::run() {
         }
         break;
       }
+      case OP_GET_UPVALUE: {
+        const uint8_t slot = read_byte();
+        push(*frame_top_->closure->upvalues[slot]->location);
+        break;
+      }
+      case OP_SET_UPVALUE: {
+        const uint8_t slot = read_byte();
+        *frame_top_->closure->upvalues[slot]->location = peek(0);
+        break;
+      }
       case OP_EQUAL: {
         const Value b = pop();
         const Value a = pop();
@@ -139,7 +153,7 @@ InterpretResult VM::run() {
         if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
           ObjString* b = AS_STRING(pop());
           ObjString* a = AS_STRING(pop());
-          push(allocate_object<ObjString>(a->string + b->string));
+          push(Value{allocate_object<ObjString>(a->string + b->string)});
         } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
           const double b = AS_NUMBER(pop());
           const double a = AS_NUMBER(pop());
@@ -197,8 +211,24 @@ InterpretResult VM::run() {
         frame_top_ = &frames_[frame_count_ - 1];
         break;
       }
+      case OP_CLOSURE: {
+        ObjFunction* function = AS_FUNCTION(read_constant());
+        auto* closure = allocate_object<ObjClosure>(function);
+        push(Value{closure});
+        for (int i = 0; i < closure->upvalue_count; i++) {
+          const uint8_t is_local = read_byte();
+          const uint8_t index = read_byte();
+          if (is_local != 0) {
+            closure->upvalues[i] = capture_upvalue(frame_top_->slots + index);
+          } else {
+            closure->upvalues[i] = frame_top_->closure->upvalues[index];
+          }
+        }
+        break;
+      }
       case OP_RETURN: {
         const Value result = pop();
+        close_upvalues(frame_top_->slots);
         if (--frame_count_ == 0) {
           pop();
           return INTERPRET_OK;
@@ -208,6 +238,10 @@ InterpretResult VM::run() {
         frame_top_ = &frames_[frame_count_ - 1];
         break;
       }
+      case OP_CLOSE_UPVALUE:
+        close_upvalues(stack_top_ - 1);
+        pop();
+        break;
       default:
         break;
     }
@@ -219,8 +253,8 @@ InterpretResult VM::run() {
 bool VM::call_value(Value callee, int arg_count) {
   if (IS_OBJ(callee)) {
     switch (OBJ_TYPE(callee)) {
-      case OBJ_FUNCTION:
-        return call(AS_FUNCTION(callee), arg_count);
+      case OBJ_CLOSURE:
+        return call(AS_CLOSURE(callee), arg_count);
       case OBJ_NATIVE: {
         NativeFn native = AS_NATIVE(callee);
         const Value result = native(arg_count, stack_top_ - arg_count);
@@ -236,9 +270,9 @@ bool VM::call_value(Value callee, int arg_count) {
   return false;
 }
 
-bool VM::call(ObjFunction* function, int arg_count) {
-  if (arg_count != function->arity) {
-    runtime_error("Expected " + std::to_string(function->arity) +
+bool VM::call(ObjClosure* closure, int arg_count) {
+  if (arg_count != closure->function->arity) {
+    runtime_error("Expected " + std::to_string(closure->function->arity) +
                   " arguments but got " + std::to_string(arg_count) + ".");
     return false;
   }
@@ -249,10 +283,43 @@ bool VM::call(ObjFunction* function, int arg_count) {
   }
 
   CallFrame* frame = &frames_[frame_count_++];
-  frame->function = function;
-  frame->ip = function->chunk.get_code(0);
+  frame->closure = closure;
+  frame->ip = closure->function->chunk.get_code(0);
   frame->slots = stack_top_ - arg_count - 1;
   return true;
+}
+
+ObjUpvalue* VM::capture_upvalue(Value* local) {
+  ObjUpvalue* prev_upvalue{};
+  ObjUpvalue* upvalue = open_upvalues;
+  while (upvalue != nullptr && upvalue->location > local) {
+    prev_upvalue = upvalue;
+    upvalue = upvalue->next_upvalue;
+  }
+
+  if (upvalue != nullptr && upvalue->location == local) {
+    return upvalue;
+  }
+
+  auto* created_upvalue = allocate_object<ObjUpvalue>(local);
+  created_upvalue->next_upvalue = upvalue;
+
+  if (prev_upvalue == nullptr) {
+    open_upvalues = created_upvalue;
+  } else {
+    prev_upvalue->next_upvalue = created_upvalue;
+  }
+
+  return created_upvalue;
+}
+
+void VM::close_upvalues(Value* last) {
+  while (open_upvalues != nullptr && open_upvalues->location >= last) {
+    ObjUpvalue* upvalue = open_upvalues;
+    upvalue->closed = *upvalue->location;
+    upvalue->location = &upvalue->closed;
+    open_upvalues = upvalue->next_upvalue;
+  }
 }
 
 void VM::reset_stack() {
@@ -265,7 +332,7 @@ void VM::runtime_error(const std::string& message) {
 
   for (int i = frame_count_ - 1; i >= 0; i--) {
     CallFrame* frame = &frames_[i];
-    ObjFunction* function = frame->function;
+    ObjFunction* function = frame->closure->function;
     const int instruction = frame->ip - function->chunk.get_code(0) - 1;
     std::cerr << "[line " << function->chunk.get_line(instruction) << "] in ";
     if (function->name == nullptr) {

@@ -3,6 +3,8 @@
 #include <iomanip>
 #include <iostream>
 
+#include "object.hpp"
+
 namespace lox::bytecode {
 void Chunk::write(uint8_t byte, int line) {
   code_.push_back(byte);
@@ -52,6 +54,10 @@ int Chunk::disassemble_instruction(int offset) const {
       return constant_instruction("OP_DEFINE_GLOBAL", offset);
     case OP_SET_GLOBAL:
       return constant_instruction("OP_SET_GLOBAL", offset);
+    case OP_GET_UPVALUE:
+      return byte_instruction("OP_GET_UPVALUE", offset);
+    case OP_SET_UPVALUE:
+      return byte_instruction("OP_SET_UPVALUE", offset);
     case OP_EQUAL:
       return simple_instruction("OP_EQUAL", offset);
     case OP_GREATER:
@@ -80,6 +86,29 @@ int Chunk::disassemble_instruction(int offset) const {
       return jump_instruction("OP_LOOP", -1, offset);
     case OP_CALL:
       return byte_instruction("OP_CALL", offset);
+    case OP_CLOSURE: {
+      offset++;
+      const int constant = code_[offset++];
+      std::cout << std::setfill(' ') << std::setw(16) << std::left
+                << "OP_CLOSURE" << ' ' << std::setw(4) << std::right << constant
+                << ' ';
+      constants_[constant].print();
+      std::cout << '\n';
+
+      ObjFunction* function = AS_FUNCTION(constants_[constant]);
+      for (int j = 0; j < function->upvalue_count; j++) {
+        const int is_local = code_[offset++];
+        const int index = code_[offset++];
+        std::cout << std::setfill('0') << std::setw(4) << std::right
+                  << offset - 2 << "      |                     "
+                  << (is_local != 0 ? "local" : "upvalue") << ' ' << index
+                  << '\n';
+      }
+
+      return offset;
+    }
+    case OP_CLOSE_UPVALUE:
+      return simple_instruction("OP_CLOSE_UPVALUE", offset);
     case OP_RETURN:
       return simple_instruction("OP_RETURN", offset);
     default:

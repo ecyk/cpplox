@@ -6,6 +6,14 @@
 #include "object.hpp"
 
 namespace lox::bytecode {
+static void print_function(ObjFunction* function) {
+  if (function->name == nullptr) {
+    std::cout << "<script>";
+    return;
+  }
+  std::cout << "<fn " << function->name->string << ">";
+}
+
 void Value::print() const {
   switch (type) {
     case VAL_BOOL:
@@ -23,18 +31,20 @@ void Value::print() const {
     }
     case VAL_OBJ:
       switch (OBJ_TYPE(*this)) {
+        case OBJ_CLOSURE:
+          print_function(AS_CLOSURE(*this)->function);
+          break;
         case OBJ_FUNCTION:
-          if (AS_FUNCTION(*this)->name == nullptr) {
-            std::cout << "<script>";
-            return;
-          }
-          std::cout << "<fn " << AS_FUNCTION(*this)->name->string << ">";
+          print_function(AS_FUNCTION(*this));
           break;
         case OBJ_NATIVE:
           std::cout << "<native fn>";
           break;
         case OBJ_STRING:
           std::cout << AS_STRING(*this)->string;
+          break;
+        case OBJ_UPVALUE:
+          std::cout << "upvalue";
           break;
         default:
           break;
