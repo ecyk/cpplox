@@ -52,13 +52,13 @@ std::array<Compiler::ParseRule, TOKEN_COUNT> Compiler::rules{{
     {nullptr, nullptr, Compiler::PREC_NONE}               // TOKEN_EOF
 }};
 
-Compiler::Compiler(Scanner* scanner, FunctionType type, Compiler* enclosing)
-    : scanner_{scanner},
-      type_{type},
-      enclosing_{enclosing},
-      function_{VM::allocate_object<ObjFunction>()} {
-  if (type != TYPE_SCRIPT) {
-    function_->name = VM::allocate_object<ObjString>(previous.lexeme_);
+Compiler::Compiler(Scanner& scanner, FunctionType type, Compiler* enclosing)
+    : scanner_{&scanner}, type_{type}, enclosing_{enclosing} {
+  g_current_compiler = this;
+
+  function_ = vm.allocate_object<ObjFunction>();
+  if (type_ != TYPE_SCRIPT) {
+    function_->name = vm.allocate_object<ObjString>(previous.lexeme_);
   }
 
   local_count_++;
@@ -84,7 +84,17 @@ ObjFunction* Compiler::end_compiler() {
   }
 #endif
 
+  g_current_compiler = enclosing_;
+
   return had_error ? nullptr : function_;
+}
+
+void Compiler::mark_compiler_roots() {
+  Compiler* compiler = this;
+  do {
+    vm.mark_object(compiler->function_);
+    compiler = compiler->enclosing_;
+  } while (compiler != nullptr);
 }
 
 void Compiler::emit_byte(uint8_t byte) {
@@ -109,11 +119,11 @@ int Compiler::emit_jump(uint8_t instruction) {
   emit_byte(instruction);
   emit_byte(0xff);
   emit_byte(0xff);
-  return current_chunk()->count() - 2;
+  return static_cast<int>(current_chunk()->get_codes().size()) - 2;
 }
 
 void Compiler::patch_jump(int offset) {
-  const unsigned int jump = current_chunk()->count() - offset - 2;
+  const unsigned int jump = current_chunk()->get_codes().size() - offset - 2;
 
   if (jump > UINT16_MAX) {
     error("Too much code to jump over.");
@@ -126,7 +136,8 @@ void Compiler::patch_jump(int offset) {
 void Compiler::emit_loop(int loop_start) {
   emit_byte(OP_LOOP);
 
-  const unsigned int offset = current_chunk()->count() - loop_start + 2;
+  const unsigned int offset =
+      current_chunk()->get_codes().size() - loop_start + 2;
   if (offset > UINT16_MAX) {
     error("Loop body too large.");
   }
@@ -157,7 +168,7 @@ void Compiler::fun_declaration() {
 }
 
 void Compiler::function(FunctionType type) {
-  Compiler compiler{scanner_, type, this};
+  Compiler compiler{*scanner_, type, this};
   compiler.begin_scope();
 
   compiler.consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.");
@@ -263,7 +274,7 @@ void Compiler::return_statement() {
 }
 
 void Compiler::while_statement() {
-  const int loop_start = current_chunk()->count();
+  const int loop_start = static_cast<int>(current_chunk()->get_codes().size());
 
   consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
   expression();
@@ -290,7 +301,7 @@ void Compiler::for_statement() {
     expression_statement();
   }
 
-  int loop_start = current_chunk()->count();
+  int loop_start = static_cast<int>(current_chunk()->get_codes().size());
   int exit_jump = -1;
   if (!match(TOKEN_SEMICOLON)) {
     expression();
@@ -302,7 +313,8 @@ void Compiler::for_statement() {
 
   if (!match(TOKEN_RIGHT_PAREN)) {
     const int body_jump = emit_jump(OP_JUMP);
-    const int increment_start = current_chunk()->count();
+    const int increment_start =
+        static_cast<int>(current_chunk()->get_codes().size());
     expression();
     emit_byte(OP_POP);
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
@@ -369,14 +381,14 @@ void Compiler::and_(bool /*can_assign*/) {
 }
 
 void Compiler::or_(bool /*can_assign*/) {
-  const int elseJump = emit_jump(OP_JUMP_IF_FALSE);
-  const int endJump = emit_jump(OP_JUMP);
+  const int else_jump = emit_jump(OP_JUMP_IF_FALSE);
+  const int end_jump = emit_jump(OP_JUMP);
 
-  patch_jump(elseJump);
+  patch_jump(else_jump);
   emit_byte(OP_POP);
 
   parse_precedence(PREC_OR);
-  patch_jump(endJump);
+  patch_jump(end_jump);
 }
 
 void Compiler::binary(bool /*can_assign*/) {
@@ -459,7 +471,7 @@ void Compiler::literal(bool /*can_assign*/) {
 void Compiler::string(bool /*can_assign*/) {
   previous.lexeme_.remove_prefix(1);
   previous.lexeme_.remove_suffix(1);
-  emit_constant(Value{VM::allocate_object<ObjString>(previous.lexeme_)});
+  emit_constant(Value{vm.allocate_object<ObjString>(previous.lexeme_)});
 }
 
 void Compiler::variable(bool can_assign) {
@@ -616,7 +628,7 @@ uint8_t Compiler::make_constant(Value value) {
 }
 
 uint8_t Compiler::identifier_constant(const Token& name) {
-  return make_constant(Value{VM::allocate_object<ObjString>(name.lexeme_)});
+  return make_constant(Value{vm.allocate_object<ObjString>(name.lexeme_)});
 }
 
 void Compiler::end_scope() {

@@ -30,6 +30,7 @@ struct Obj {
   Obj& operator=(Obj&&) = delete;
 
   ObjType type;
+  bool is_marked{};
   Obj* next_object{};
 };
 

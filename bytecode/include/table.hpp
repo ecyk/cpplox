@@ -22,10 +22,14 @@ class Table {
   bool set(ObjString* key, Value value);
   bool get(ObjString* key, Value* value) const;
   bool del(ObjString* key);
-
   void add_all(Table& to) const;
+
   [[nodiscard]] ObjString* find_string(std::string_view string,
                                        uint32_t hash) const;
+  void remove_white();
+
+  [[nodiscard]] const Entries& get_entries() const { return entries_; }
+  [[nodiscard]] int get_capacity() const { return capacity_; }
 
  private:
   static Entry* find_entry(const Entries& entries, int capacity,

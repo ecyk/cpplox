@@ -1,7 +1,6 @@
 #include "vm.hpp"
 
 #include <chrono>
-#include <iostream>
 
 namespace lox::bytecode {
 static Value clock_native(int /*arg_count*/, Value* /*args*/) {
@@ -13,24 +12,12 @@ static Value clock_native(int /*arg_count*/, Value* /*args*/) {
   return Value{static_cast<double>(ms) * ms_to_seconds};
 }
 
-void VM::clean_objects() {
-  Obj* object = objects;
-  while (object != nullptr) {
-    Obj* next_object = object->next_object;
-    delete object;
-    object = next_object;
-  }
-  objects = nullptr;
-}
-
 VM::VM() {
   reset_stack();
   define_native("clock", clock_native);
 }
 
 InterpretResult VM::interpret(ObjFunction* function) {
-  reset_stack();
-
   push(Value{function});
   auto* closure = allocate_object<ObjClosure>(function);
   pop();
@@ -151,9 +138,12 @@ InterpretResult VM::run() {
         break;
       case OP_ADD:
         if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
-          ObjString* b = AS_STRING(pop());
-          ObjString* a = AS_STRING(pop());
-          push(Value{allocate_object<ObjString>(a->string + b->string)});
+          ObjString* b = AS_STRING(peek(0));
+          ObjString* a = AS_STRING(peek(1));
+          auto* string = allocate_object<ObjString>(a->string + b->string);
+          pop();
+          pop();
+          push(Value{string});
         } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
           const double b = AS_NUMBER(pop());
           const double a = AS_NUMBER(pop());
@@ -284,14 +274,19 @@ bool VM::call(ObjClosure* closure, int arg_count) {
 
   CallFrame* frame = &frames_[frame_count_++];
   frame->closure = closure;
-  frame->ip = closure->function->chunk.get_code(0);
+  frame->ip = closure->function->chunk.get_codes().data();
   frame->slots = stack_top_ - arg_count - 1;
   return true;
 }
 
+void VM::reset_stack() {
+  stack_.fill({});
+  stack_top_ = stack_.data();
+}
+
 ObjUpvalue* VM::capture_upvalue(Value* local) {
   ObjUpvalue* prev_upvalue{};
-  ObjUpvalue* upvalue = open_upvalues;
+  ObjUpvalue* upvalue = open_upvalues_;
   while (upvalue != nullptr && upvalue->location > local) {
     prev_upvalue = upvalue;
     upvalue = upvalue->next_upvalue;
@@ -305,7 +300,7 @@ ObjUpvalue* VM::capture_upvalue(Value* local) {
   created_upvalue->next_upvalue = upvalue;
 
   if (prev_upvalue == nullptr) {
-    open_upvalues = created_upvalue;
+    open_upvalues_ = created_upvalue;
   } else {
     prev_upvalue->next_upvalue = created_upvalue;
   }
@@ -314,17 +309,12 @@ ObjUpvalue* VM::capture_upvalue(Value* local) {
 }
 
 void VM::close_upvalues(Value* last) {
-  while (open_upvalues != nullptr && open_upvalues->location >= last) {
-    ObjUpvalue* upvalue = open_upvalues;
+  while (open_upvalues_ != nullptr && open_upvalues_->location >= last) {
+    ObjUpvalue* upvalue = open_upvalues_;
     upvalue->closed = *upvalue->location;
     upvalue->location = &upvalue->closed;
-    open_upvalues = upvalue->next_upvalue;
+    open_upvalues_ = upvalue->next_upvalue;
   }
-}
-
-void VM::reset_stack() {
-  stack_.fill({});
-  stack_top_ = stack_.data();
 }
 
 void VM::runtime_error(const std::string& message) {
@@ -333,8 +323,10 @@ void VM::runtime_error(const std::string& message) {
   for (int i = frame_count_ - 1; i >= 0; i--) {
     CallFrame* frame = &frames_[i];
     ObjFunction* function = frame->closure->function;
-    const int instruction = frame->ip - function->chunk.get_code(0) - 1;
-    std::cerr << "[line " << function->chunk.get_line(instruction) << "] in ";
+    const int instruction =
+        static_cast<int>(frame->ip - function->chunk.get_codes().data() - 1);
+    std::cerr << "[line " << function->chunk.get_lines()[instruction]
+              << "] in ";
     if (function->name == nullptr) {
       std::cerr << "script\n";
     } else {
@@ -343,5 +335,174 @@ void VM::runtime_error(const std::string& message) {
   }
 
   reset_stack();
+}
+
+void VM::mark_object(Obj* object) {
+  if (object == nullptr) {
+    return;
+  }
+  if (object->is_marked) {
+    return;
+  }
+
+#ifdef DEBUG_LOG_GC
+  std::cout << (void*)object << " mark ";
+  Value{object}.print();
+  std::cout << '\n';
+#endif
+
+  object->is_marked = true;
+
+  gray_stack_.push(object);
+}
+
+void VM::mark_value(Value value) {
+  if (IS_OBJ(value)) {
+    mark_object(AS_OBJ(value));
+  }
+}
+
+void VM::mark_table(const Table& table) {
+  for (int i = 0; i < table.get_capacity(); i++) {
+    Entry* entry = &table.get_entries()[i];
+    mark_object(static_cast<Obj*>(entry->key));
+    mark_value(entry->value);
+  }
+}
+
+void VM::blacken_object(Obj* object) {
+#ifdef DEBUG_LOG_GC
+  std::cout << (void*)object << " blacken ";
+  Value{object}.print();
+  std::cout << '\n';
+#endif
+
+  switch (object->type) {
+    case OBJ_CLOSURE: {
+      auto* closure = static_cast<ObjClosure*>(object);
+      mark_object(closure->function);
+      for (int i = 0; i < closure->upvalue_count; i++) {
+        mark_object(closure->upvalues[i]);
+      }
+      break;
+    }
+    case OBJ_FUNCTION: {
+      auto* function = static_cast<ObjFunction*>(object);
+      mark_object((Obj*)function->name);
+      for (auto i : function->chunk.get_constants()) {
+        mark_value(i);
+      }
+      break;
+    }
+    case OBJ_UPVALUE:
+      mark_value(static_cast<ObjUpvalue*>(object)->closed);
+      break;
+    default:
+      break;
+  }
+}
+
+void VM::collect_garbage() {
+#ifdef DEBUG_LOG_GC
+  std::cout << "-- gc begin\n";
+  const size_t before = bytes_allocated_;
+#endif
+
+  mark_roots();
+  trace_references();
+  strings.remove_white();
+  sweep();
+
+  next_gc_ = bytes_allocated_ * GC_HEAP_GROW_FACTOR;
+
+#ifdef DEBUG_LOG_GC
+  std::cout << "-- gc end\n";
+  std::cout << "   collected " << before - bytes_allocated_ << " bytes (from "
+            << before << " to " << bytes_allocated_ << ") next at " << next_gc_
+            << '\n';
+#endif
+}
+
+void VM::free_objects() {
+  Obj* object = objects;
+  while (object != nullptr) {
+    Obj* next = object->next_object;
+#ifdef DEBUG_LOG_GC
+    std::cout << (void*)object << " free type " << object->type << '\n';
+#endif
+    delete object;
+    object = next;
+  }
+}
+
+void VM::mark_roots() {
+  for (Value* slot = stack_.data(); slot < stack_top_; slot++) {
+    mark_value(*slot);
+  }
+
+  mark_table(globals);
+  if (g_current_compiler != nullptr) {
+    g_current_compiler->mark_compiler_roots();
+  }
+
+  for (int i = 0; i < frame_count_; i++) {
+    mark_object(static_cast<Obj*>(frames_[i].closure));
+  }
+
+  for (ObjUpvalue* upvalue = open_upvalues_; upvalue != nullptr;
+       upvalue = upvalue->next_upvalue) {
+    mark_object(static_cast<Obj*>(upvalue));
+  }
+}
+
+void VM::trace_references() {
+  while (!gray_stack_.empty()) {
+    Obj* object = gray_stack_.top();
+    gray_stack_.pop();
+    blacken_object(object);
+  }
+}
+
+void VM::sweep() {
+  Obj* previous = nullptr;
+  Obj* object = objects;
+  while (object != nullptr) {
+    if (object->is_marked) {
+      object->is_marked = false;
+      previous = object;
+      object = object->next_object;
+    } else {
+      Obj* unreached = object;
+      object = object->next_object;
+      if (previous != nullptr) {
+        previous->next_object = object;
+      } else {
+        objects = object;
+      }
+
+      switch (unreached->type) {
+        case OBJ_CLOSURE:
+          bytes_allocated_ -= sizeof(ObjClosure);
+          break;
+        case OBJ_FUNCTION:
+          bytes_allocated_ -= sizeof(ObjFunction);
+          break;
+        case OBJ_NATIVE:
+          bytes_allocated_ -= sizeof(ObjNative);
+          break;
+        case OBJ_STRING:
+          bytes_allocated_ -= sizeof(ObjString);
+          break;
+        case OBJ_UPVALUE:
+          bytes_allocated_ -= sizeof(ObjUpvalue);
+          break;
+      }
+
+#ifdef DEBUG_LOG_GC
+      std::cout << (void*)unreached << " free type " << unreached->type << '\n';
+#endif
+      delete unreached;
+    }
+  }
 }
 }  // namespace lox::bytecode

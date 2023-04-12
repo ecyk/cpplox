@@ -43,16 +43,11 @@ class Chunk {
   void disassemble(std::string_view name) const;
   int disassemble_instruction(int offset) const;
 
-  [[nodiscard]] const uint8_t* get_code(int offset) const {
-    return &code_[offset];
-  }
-  void set_code(int offset, uint8_t value) { code_[offset] = value; }
-  [[nodiscard]] int get_line(int offset) const { return lines_[offset]; }
-  [[nodiscard]] Value get_constant(int offset) const {
-    return constants_[offset];
-  }
+  [[nodiscard]] const std::vector<uint8_t>& get_codes() const { return code_; }
+  [[nodiscard]] const std::vector<int>& get_lines() const { return lines_; }
+  [[nodiscard]] const ValueArray& get_constants() const { return constants_; }
 
-  [[nodiscard]] int count() const { return static_cast<int>(code_.size()); }
+  void set_code(int offset, uint8_t value) { code_[offset] = value; }
 
  private:
   static int simple_instruction(std::string_view name, int offset);

@@ -77,6 +77,15 @@ ObjString* Table::find_string(std::string_view string, uint32_t hash) const {
   }
 }
 
+void Table::remove_white() {
+  for (int i = 0; i < capacity_; i++) {
+    Entry* entry = &entries_[i];
+    if (entry->key != nullptr && !entry->key->is_marked) {
+      del(entry->key);
+    }
+  }
+}
+
 Entry* Table::find_entry(const Entries& entries, int capacity,
                          const ObjString* key) {
   uint32_t index = key->hash % capacity;

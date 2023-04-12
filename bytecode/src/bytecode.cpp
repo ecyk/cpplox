@@ -9,14 +9,13 @@
 namespace lox::bytecode {
 static InterpretResult run(const std::string& source) {
   Scanner scanner{source};
+  Compiler compiler{scanner};
 
-  Compiler compiler{&scanner};
   ObjFunction* function = compiler.compile();
   if (function == nullptr) {
     return INTERPRET_COMPILE_ERROR;
   }
 
-  VM vm;
   return vm.interpret(function);
 }
 
@@ -27,7 +26,7 @@ int run_file(const std::string& path) {
                            std::istreambuf_iterator<char>{}};
 
   const InterpretResult result = run(source);
-  VM::clean_objects();
+  vm.free_objects();
 
   if (result == INTERPRET_COMPILE_ERROR) {
     return 65;
@@ -51,6 +50,6 @@ void run_prompt() {
 
     run(source_line);
   }
-  VM::clean_objects();
+  vm.free_objects();
 }
 }  // namespace lox::bytecode

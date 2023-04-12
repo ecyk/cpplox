@@ -49,10 +49,12 @@ class Compiler {
   inline static bool panic_mode{};
 
  public:
-  explicit Compiler(Scanner* scanner, FunctionType type = TYPE_SCRIPT,
+  explicit Compiler(Scanner& scanner, FunctionType type = TYPE_SCRIPT,
                     Compiler* enclosing = nullptr);
 
   ObjFunction* compile();
+
+  void mark_compiler_roots();
 
  private:
   ObjFunction* end_compiler();
@@ -133,4 +135,6 @@ class Compiler {
   Compiler* enclosing_{};
   Scanner* scanner_;
 };
+
+inline Compiler* g_current_compiler;
 }  // namespace lox::bytecode

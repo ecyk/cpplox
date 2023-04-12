@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "object.hpp"
+#include "vm.hpp"
 
 namespace lox::bytecode {
 void Chunk::write(uint8_t byte, int line) {
@@ -12,7 +13,9 @@ void Chunk::write(uint8_t byte, int line) {
 }
 
 int Chunk::add_constant(Value value) {
+  vm.push(value);
   constants_.push_back(value);
+  vm.pop();
   return static_cast<int>(constants_.size()) - 1;
 }
 
