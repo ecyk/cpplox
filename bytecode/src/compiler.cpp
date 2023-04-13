@@ -8,12 +8,12 @@
 namespace lox::bytecode {
 std::array<Compiler::ParseRule, TOKEN_COUNT> Compiler::rules{{
     {&Compiler::grouping, &Compiler::call,
-     Compiler::PREC_CALL},                    // TOKEN_LEFT_PAREN
-    {nullptr, nullptr, Compiler::PREC_NONE},  // TOKEN_RIGHT_PAREN
-    {nullptr, nullptr, Compiler::PREC_NONE},  // TOKEN_LEFT_BRACE
-    {nullptr, nullptr, Compiler::PREC_NONE},  // TOKEN_RIGHT_BRACE
-    {nullptr, nullptr, Compiler::PREC_NONE},  // TOKEN_COMMA
-    {nullptr, nullptr, Compiler::PREC_NONE},  // TOKEN_DOT
+     Compiler::PREC_CALL},                           // TOKEN_LEFT_PAREN
+    {nullptr, nullptr, Compiler::PREC_NONE},         // TOKEN_RIGHT_PAREN
+    {nullptr, nullptr, Compiler::PREC_NONE},         // TOKEN_LEFT_BRACE
+    {nullptr, nullptr, Compiler::PREC_NONE},         // TOKEN_RIGHT_BRACE
+    {nullptr, nullptr, Compiler::PREC_NONE},         // TOKEN_COMMA
+    {nullptr, &Compiler::dot, Compiler::PREC_CALL},  // TOKEN_DOT
     {&Compiler::unary, &Compiler::binary, Compiler::PREC_TERM},  // TOKEN_MINUS
     {nullptr, &Compiler::binary, Compiler::PREC_TERM},           // TOKEN_PLUS
     {nullptr, nullptr, Compiler::PREC_NONE},                // TOKEN_SEMICOLON
@@ -43,8 +43,8 @@ std::array<Compiler::ParseRule, TOKEN_COUNT> Compiler::rules{{
     {nullptr, &Compiler::or_, Compiler::PREC_OR},         // TOKEN_OR
     {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_PRINT
     {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_RETURN
-    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_SUPER
-    {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_THIS
+    {&Compiler::super_, nullptr, Compiler::PREC_NONE},    // TOKEN_SUPER
+    {&Compiler::this_, nullptr, Compiler::PREC_NONE},     // TOKEN_THIS
     {&Compiler::literal, nullptr, Compiler::PREC_NONE},   // TOKEN_TRUE
     {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_VAR
     {nullptr, nullptr, Compiler::PREC_NONE},              // TOKEN_WHILE
@@ -56,15 +56,24 @@ Compiler::Compiler(Scanner& scanner, FunctionType type, Compiler* enclosing)
     : scanner_{&scanner}, type_{type}, enclosing_{enclosing} {
   g_current_compiler = this;
 
-  function_ = vm.allocate_object<ObjFunction>();
+  function_ = g_vm.allocate_object<ObjFunction>();
   if (type_ != TYPE_SCRIPT) {
-    function_->name = vm.allocate_object<ObjString>(previous.lexeme_);
+    function_->name = g_vm.allocate_object<ObjString>(previous.lexeme_);
+  }
+
+  if (type != TYPE_FUNCTION) {
+    locals_[0].name.lexeme_ = "this";
+  } else {
+    locals_[0].name.lexeme_ = "";
   }
 
   local_count_++;
 }
 
 ObjFunction* Compiler::compile() {
+  had_error = false;
+  panic_mode = false;
+
   advance();
 
   while (!match(TOKEN_EOF)) {
@@ -92,7 +101,7 @@ ObjFunction* Compiler::end_compiler() {
 void Compiler::mark_compiler_roots() {
   Compiler* compiler = this;
   do {
-    vm.mark_object(compiler->function_);
+    g_vm.mark_object(compiler->function_);
     compiler = compiler->enclosing_;
   } while (compiler != nullptr);
 }
@@ -111,7 +120,12 @@ void Compiler::emit_constant(Value value) {
 }
 
 void Compiler::emit_return() {
-  emit_byte(OP_NIL);
+  if (type_ == TYPE_INITIALIZER) {
+    emit_bytes(OP_GET_LOCAL, 0);
+  } else {
+    emit_byte(OP_NIL);
+  }
+
   emit_byte(OP_RETURN);
 }
 
@@ -147,7 +161,9 @@ void Compiler::emit_loop(int loop_start) {
 }
 
 void Compiler::declaration() {
-  if (match(TOKEN_FUN)) {
+  if (match(TOKEN_CLASS)) {
+    class_declaration();
+  } else if (match(TOKEN_FUN)) {
     fun_declaration();
   } else if (match(TOKEN_VAR)) {
     var_declaration();
@@ -158,6 +174,59 @@ void Compiler::declaration() {
   if (panic_mode) {
     synchronize();
   }
+}
+
+void Compiler::class_declaration() {
+  consume(TOKEN_IDENTIFIER, "Expect class name.");
+  const Token class_name = previous;
+  const uint8_t name_constant = identifier_constant(previous);
+  declare_variable();
+
+  emit_bytes(OP_CLASS, name_constant);
+  define_variable(name_constant);
+
+  ClassCompiler class_compiler;
+  class_compiler.enclosing = g_current_class_compiler;
+  g_current_class_compiler = &class_compiler;
+
+  if (match(TOKEN_LESS)) {
+    consume(TOKEN_IDENTIFIER, "Expect superclass name.");
+    variable(false);
+    if (class_name.lexeme_ == previous.lexeme_) {
+      error("A class can't inherit from itself.");
+    }
+    begin_scope();
+    add_local(Token{TOKEN_SUPER, "super", 0});
+    define_variable(0);
+    named_variable(class_name, false);
+    emit_byte(OP_INHERIT);
+    class_compiler.has_super_class = true;
+  }
+
+  named_variable(class_name, false);
+  consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+  while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
+    method();
+  }
+  consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
+  emit_byte(OP_POP);
+
+  if (class_compiler.has_super_class) {
+    end_scope();
+  }
+
+  g_current_class_compiler = g_current_class_compiler->enclosing;
+}
+
+void Compiler::method() {
+  consume(TOKEN_IDENTIFIER, "Expect method name.");
+  const uint8_t constant = identifier_constant(previous);
+  FunctionType type = TYPE_METHOD;
+  if (previous.lexeme_ == "init") {
+    type = TYPE_INITIALIZER;
+  }
+  function(type);
+  emit_bytes(OP_METHOD, constant);
 }
 
 void Compiler::fun_declaration() {
@@ -191,7 +260,7 @@ void Compiler::function(FunctionType type) {
     return;
   }
 
-  emit_bytes(OP_CLOSURE, make_constant(Value{function}));
+  emit_bytes(OP_CLOSURE, make_constant(OBJ_VAL(function)));
 
   for (int i = 0; i < function->upvalue_count; i++) {
     emit_byte(compiler.upvalues_[i].is_local ? 1 : 0);
@@ -267,6 +336,10 @@ void Compiler::return_statement() {
   if (match(TOKEN_SEMICOLON)) {
     emit_return();
   } else {
+    if (type_ == TYPE_INITIALIZER) {
+      error("Can't return a value from an initializer.");
+    }
+
     expression();
     consume(TOKEN_SEMICOLON, "Expect ';' after return value.");
     emit_byte(OP_RETURN);
@@ -371,6 +444,54 @@ uint8_t Compiler::argument_list() {
   return arg_count;
 }
 
+void Compiler::super_(bool /*can_assign*/) {
+  if (g_current_class_compiler == nullptr) {
+    error("Can't use 'super' outside of a class.");
+  } else if (!g_current_class_compiler->has_super_class) {
+    error("Can't use 'super' in a class with no superclass.");
+  }
+
+  consume(TOKEN_DOT, "Expect '.' after 'super'.");
+  consume(TOKEN_IDENTIFIER, "Expect superclass method name.");
+  const uint8_t name = identifier_constant(previous);
+
+  named_variable(Token{TOKEN_THIS, "this", 0}, false);
+  if (match(TOKEN_LEFT_PAREN)) {
+    const uint8_t argCount = argument_list();
+    named_variable(Token{TOKEN_SUPER, "super", 0}, false);
+    emit_bytes(OP_SUPER_INVOKE, name);
+    emit_byte(argCount);
+  } else {
+    named_variable(Token{TOKEN_SUPER, "super", 0}, false);
+    emit_bytes(OP_GET_SUPER, name);
+  }
+}
+
+void Compiler::this_(bool /*can_assign*/) {
+  if (g_current_class_compiler == nullptr) {
+    error("Can't use 'this' outside of a class.");
+    return;
+  }
+
+  variable(false);
+}
+
+void Compiler::dot(bool can_assign) {
+  consume(TOKEN_IDENTIFIER, "Expect property name after '.'.");
+  const uint8_t name = identifier_constant(previous);
+
+  if (can_assign && match(TOKEN_EQUAL)) {
+    expression();
+    emit_bytes(OP_SET_PROPERTY, name);
+  } else if (match(TOKEN_LEFT_PAREN)) {
+    const uint8_t argCount = argument_list();
+    emit_bytes(OP_INVOKE, name);
+    emit_byte(argCount);
+  } else {
+    emit_bytes(OP_GET_PROPERTY, name);
+  }
+}
+
 void Compiler::and_(bool /*can_assign*/) {
   const int end_jump = emit_jump(OP_JUMP_IF_FALSE);
 
@@ -471,7 +592,7 @@ void Compiler::literal(bool /*can_assign*/) {
 void Compiler::string(bool /*can_assign*/) {
   previous.lexeme_.remove_prefix(1);
   previous.lexeme_.remove_suffix(1);
-  emit_constant(Value{vm.allocate_object<ObjString>(previous.lexeme_)});
+  emit_constant(OBJ_VAL(g_vm.allocate_object<ObjString>(previous.lexeme_)));
 }
 
 void Compiler::variable(bool can_assign) {
@@ -503,7 +624,7 @@ void Compiler::named_variable(const Token& name, bool can_assign) {
 
 void Compiler::number(bool /*can_assign*/) {
   const double value = strtod(previous.lexeme_.data(), nullptr);
-  emit_constant(Value{value});
+  emit_constant(NUMBER_VAL(value));
 }
 
 uint8_t Compiler::parse_variable(std::string_view error_message) {
@@ -628,7 +749,7 @@ uint8_t Compiler::make_constant(Value value) {
 }
 
 uint8_t Compiler::identifier_constant(const Token& name) {
-  return make_constant(Value{vm.allocate_object<ObjString>(name.lexeme_)});
+  return make_constant(OBJ_VAL(g_vm.allocate_object<ObjString>(name.lexeme_)));
 }
 
 void Compiler::end_scope() {

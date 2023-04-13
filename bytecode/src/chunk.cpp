@@ -13,9 +13,9 @@ void Chunk::write(uint8_t byte, int line) {
 }
 
 int Chunk::add_constant(Value value) {
-  vm.push(value);
+  g_vm.push(value);
   constants_.push_back(value);
-  vm.pop();
+  g_vm.pop();
   return static_cast<int>(constants_.size()) - 1;
 }
 
@@ -61,6 +61,12 @@ int Chunk::disassemble_instruction(int offset) const {
       return byte_instruction("OP_GET_UPVALUE", offset);
     case OP_SET_UPVALUE:
       return byte_instruction("OP_SET_UPVALUE", offset);
+    case OP_GET_PROPERTY:
+      return constant_instruction("OP_GET_PROPERTY", offset);
+    case OP_SET_PROPERTY:
+      return constant_instruction("OP_SET_PROPERTY", offset);
+    case OP_GET_SUPER:
+      return constant_instruction("OP_GET_SUPER", offset);
     case OP_EQUAL:
       return simple_instruction("OP_EQUAL", offset);
     case OP_GREATER:
@@ -89,13 +95,17 @@ int Chunk::disassemble_instruction(int offset) const {
       return jump_instruction("OP_LOOP", -1, offset);
     case OP_CALL:
       return byte_instruction("OP_CALL", offset);
+    case OP_INVOKE:
+      return invoke_instruction("OP_INVOKE", offset);
+    case OP_SUPER_INVOKE:
+      return invoke_instruction("OP_SUPER_INVOKE", offset);
     case OP_CLOSURE: {
       offset++;
       const int constant = code_[offset++];
       std::cout << std::setfill(' ') << std::setw(16) << std::left
-                << "OP_CLOSURE" << ' ' << std::setw(4) << std::right << constant
+                << "OP_CLOSURE" << std::setw(4) << std::right << constant
                 << ' ';
-      constants_[constant].print();
+      print_value(constants_[constant]);
       std::cout << '\n';
 
       ObjFunction* function = AS_FUNCTION(constants_[constant]);
@@ -114,6 +124,12 @@ int Chunk::disassemble_instruction(int offset) const {
       return simple_instruction("OP_CLOSE_UPVALUE", offset);
     case OP_RETURN:
       return simple_instruction("OP_RETURN", offset);
+    case OP_CLASS:
+      return constant_instruction("OP_CLASS", offset);
+    case OP_INHERIT:
+      return simple_instruction("OP_INHERIT", offset);
+    case OP_METHOD:
+      return constant_instruction("OP_METHOD", offset);
     default:
       std::cout << "Unknown opcode " << instruction << '\n';
       return offset + 1;
@@ -127,16 +143,16 @@ int Chunk::simple_instruction(std::string_view name, int offset) {
 
 int Chunk::constant_instruction(std::string_view name, int offset) const {
   const int constant = code_[offset + 1];
-  std::cout << std::setfill(' ') << std::setw(16) << std::left << name << ' '
+  std::cout << std::setfill(' ') << std::setw(16) << std::left << name
             << std::setw(4) << std::right << constant << " '";
-  constants_[constant].print();
+  print_value(constants_[constant]);
   std::cout << "'\n";
   return offset + 2;
 }
 
 int Chunk::byte_instruction(std::string_view name, int offset) const {
   const int slot = code_[offset + 1];
-  std::cout << std::setfill(' ') << std::setw(16) << std::left << name << ' '
+  std::cout << std::setfill(' ') << std::setw(16) << std::left << name
             << std::setw(4) << std::right << slot << '\n';
   return offset + 2;
 }
@@ -145,8 +161,20 @@ int Chunk::jump_instruction(std::string_view name, int sign, int offset) const {
   uint16_t jump = code_[offset + 1] << 8U;
   jump |= code_[offset + 2];
   std::cout << std::setfill(' ') << std::setw(16) << std::left << name
-            << std::setw(4) << std::right << ' ' << offset << " -> "
+            << std::setw(4) << std::right << offset << " -> "
             << offset + 3 + sign * jump << '\n';
+  return offset + 3;
+}
+
+int Chunk::invoke_instruction(std::string_view name, int offset) const {
+  const int constant = code_[offset + 1];
+  const int arg_count = code_[offset + 2];
+  std::cout << std::setfill(' ') << std::setw(16) << std::left << name
+            << std::setw(4) << std::right << '(' << arg_count << " args) "
+            << std::setfill('0') << std::setw(4) << std::right << constant
+            << " '";
+  print_value(constants_[constant]);
+  std::cout << "'\n";
   return offset + 3;
 }
 }  // namespace lox::bytecode

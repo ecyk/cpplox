@@ -44,7 +44,7 @@ bool Table::del(ObjString* key) {
   }
 
   entry->key = nullptr;
-  entry->value = Value{true};
+  entry->value = TRUE_VAL;
   return true;
 }
 
@@ -62,7 +62,7 @@ ObjString* Table::find_string(std::string_view string, uint32_t hash) const {
     return nullptr;
   }
 
-  uint32_t index = hash % capacity_;
+  uint32_t index = hash & (capacity_ - 1U);
   for (;;) {
     Entry* entry = &entries_[index];
     if (entry->key == nullptr) {
@@ -73,7 +73,7 @@ ObjString* Table::find_string(std::string_view string, uint32_t hash) const {
       return entry->key;
     }
 
-    index = (index + 1) % capacity_;
+    index = (index + 1) & (capacity_ - 1U);
   }
 }
 
@@ -88,7 +88,7 @@ void Table::remove_white() {
 
 Entry* Table::find_entry(const Entries& entries, int capacity,
                          const ObjString* key) {
-  uint32_t index = key->hash % capacity;
+  uint32_t index = key->hash & (capacity - 1U);
   Entry* tombstone = nullptr;
 
   for (;;) {
@@ -105,7 +105,7 @@ Entry* Table::find_entry(const Entries& entries, int capacity,
       return entry;
     }
 
-    index = (index + 1) % capacity;
+    index = (index + 1) & (capacity - 1U);
   }
 }
 

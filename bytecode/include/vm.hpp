@@ -37,6 +37,10 @@ class VM {
  private:
   InterpretResult run();
 
+  void define_method(ObjString* name);
+  bool bind_method(ObjClass* class_, ObjString* name);
+  bool invoke_from_class(ObjClass* class_, ObjString* name, int arg_count);
+  bool invoke(ObjString* name, int arg_count);
   bool call_value(Value callee, int arg_count);
   bool call(ObjClosure* closure, int arg_count);
 
@@ -55,19 +59,20 @@ class VM {
   }
 
   ObjUpvalue* capture_upvalue(Value* local);
-  void close_upvalues(Value* last);
+  void close_upvalues(const Value* last);
 
   void runtime_error(const std::string& message);
 
-  Obj* objects{};
-  Table globals;
-  Table strings;
+  Obj* objects_{};
+  Table globals_;
+  Table strings_;
+  ObjString* init_string_{};
 
   std::array<CallFrame, FRAMES_MAX> frames_;
   CallFrame* frame_top_{};
   int frame_count_{};
 
-  std::array<Value, STACK_MAX> stack_;
+  std::array<Value, STACK_MAX> stack_{};
   Value* stack_top_{};
 
   ObjUpvalue* open_upvalues_{};
@@ -87,7 +92,7 @@ class VM {
     if constexpr (std::is_same_v<ObjT, ObjString>) {
       const uint32_t hash = ::hash({std::forward<Args>(args)...});
       ObjString* interned =
-          strings.find_string({std::forward<Args>(args)...}, hash);
+          strings_.find_string({std::forward<Args>(args)...}, hash);
 
       if (interned != nullptr) {
         return interned;
@@ -98,12 +103,12 @@ class VM {
       object = new ObjT{std::forward<Args>(args)...};
     }
 
-    object->next_object = objects;
-    objects = object;
+    object->next_object = objects_;
+    objects_ = object;
 
     if constexpr (std::is_same_v<ObjT, ObjString>) {
-      push(Value{object});
-      strings.set(object, {});
+      push(OBJ_VAL(object));
+      strings_.set(object, NIL_VAL);
       pop();
     }
 
@@ -138,5 +143,5 @@ class VM {
   friend void Compiler::mark_compiler_roots();
 };
 
-inline VM vm;
+inline VM g_vm;
 }  // namespace lox::bytecode

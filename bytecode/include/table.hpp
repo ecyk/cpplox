@@ -7,7 +7,7 @@ struct ObjString;
 
 struct Entry {
   ObjString* key{};
-  Value value;
+  Value value{NIL_VAL};
 };
 
 class Table {

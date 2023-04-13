@@ -40,7 +40,12 @@ class Compiler {
     bool is_local{};
   };
 
-  enum FunctionType { TYPE_FUNCTION, TYPE_SCRIPT };
+  enum FunctionType {
+    TYPE_FUNCTION,
+    TYPE_INITIALIZER,
+    TYPE_METHOD,
+    TYPE_SCRIPT
+  };
 
   static std::array<ParseRule, TOKEN_COUNT> rules;
 
@@ -68,6 +73,8 @@ class Compiler {
   void emit_loop(int loop_start);
 
   void declaration();
+  void class_declaration();
+  void method();
   void fun_declaration();
   void function(FunctionType type);
   void var_declaration();
@@ -82,6 +89,9 @@ class Compiler {
   void expression();
   void call(bool can_assign);
   uint8_t argument_list();
+  void super_(bool can_assign);
+  void this_(bool can_assign);
+  void dot(bool can_assign);
   void and_(bool can_assign);
   void or_(bool can_assign);
   void binary(bool can_assign);
@@ -136,5 +146,11 @@ class Compiler {
   Scanner* scanner_;
 };
 
-inline Compiler* g_current_compiler;
+struct ClassCompiler {
+  ClassCompiler* enclosing{};
+  bool has_super_class{};
+};
+
+inline Compiler* g_current_compiler{};
+inline ClassCompiler* g_current_class_compiler{};
 }  // namespace lox::bytecode

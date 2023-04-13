@@ -9,34 +9,35 @@ static Value clock_native(int /*arg_count*/, Value* /*args*/) {
                 .count();
 
   constexpr double ms_to_seconds = 1.0 / 1000;
-  return Value{static_cast<double>(ms) * ms_to_seconds};
+  return NUMBER_VAL(static_cast<double>(ms) * ms_to_seconds);
 }
 
 VM::VM() {
   reset_stack();
   define_native("clock", clock_native);
+  init_string_ = allocate_object<ObjString>("init");
 }
 
 InterpretResult VM::interpret(ObjFunction* function) {
-  push(Value{function});
+  push(OBJ_VAL(function));
   auto* closure = allocate_object<ObjClosure>(function);
   pop();
-  push(Value{closure});
+  push(OBJ_VAL(closure));
   call(closure, 0);
 
   return run();
 }
 
 void VM::define_native(std::string_view name, NativeFn function) {
-  push(Value{allocate_object<ObjString>(name)});
-  push(Value{allocate_object<ObjNative>(function)});
-  globals.set(AS_STRING(stack_[0]), stack_[1]);
+  push(OBJ_VAL(allocate_object<ObjString>(name)));
+  push(OBJ_VAL(allocate_object<ObjNative>(function)));
+  globals_.set(AS_STRING(stack_[0]), stack_[1]);
   pop();
   pop();
 }
 
 InterpretResult VM::run() {
-#define BINARY_OP(op)                                 \
+#define BINARY_OP(value_type, op)                     \
   do {                                                \
     if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
       runtime_error("Operands must be numbers.");     \
@@ -44,7 +45,7 @@ InterpretResult VM::run() {
     }                                                 \
     const double b = AS_NUMBER(pop());                \
     const double a = AS_NUMBER(pop());                \
-    push(Value{a op b});                              \
+    push(value_type(a op b));                         \
   } while (false)
 
   frame_top_ = &frames_[frame_count_ - 1];
@@ -54,13 +55,14 @@ InterpretResult VM::run() {
     std::cout << "          ";
     for (const Value* slot = stack_.data(); slot < stack_top_; slot++) {
       std::cout << "[ ";
-      slot->print();
+      print_value(*slot);
       std::cout << " ]";
     }
     std::cout << '\n';
     frame_top_->closure->function->chunk.disassemble_instruction(
-        static_cast<int>(frame_top_->ip -
-                         frame_top_->closure->function->chunk.get_code(0)));
+        static_cast<int>(
+            frame_top_->ip -
+            frame_top_->closure->function->chunk.get_codes().data()));
 #endif
 
     switch (const uint8_t instruction = read_byte()) {
@@ -68,13 +70,13 @@ InterpretResult VM::run() {
         push(read_constant());
         break;
       case OP_NIL:
-        push({});
+        push(NIL_VAL);
         break;
       case OP_TRUE:
-        push(Value{true});
+        push(TRUE_VAL);
         break;
       case OP_FALSE:
-        push(Value{false});
+        push(FALSE_VAL);
         break;
       case OP_POP:
         pop();
@@ -91,8 +93,8 @@ InterpretResult VM::run() {
       }
       case OP_GET_GLOBAL: {
         ObjString* name = AS_STRING(read_constant());
-        Value value;
-        if (!globals.get(name, &value)) {
+        Value value{NIL_VAL};
+        if (!globals_.get(name, &value)) {
           runtime_error("Undefined variable '" + name->string + "'.");
           return INTERPRET_RUNTIME_ERROR;
         }
@@ -101,14 +103,14 @@ InterpretResult VM::run() {
       }
       case OP_DEFINE_GLOBAL: {
         ObjString* name = AS_STRING(read_constant());
-        globals.set(name, peek(0));
+        globals_.set(name, peek(0));
         pop();
         break;
       }
       case OP_SET_GLOBAL: {
         ObjString* name = AS_STRING(read_constant());
-        if (globals.set(name, peek(0))) {
-          globals.del(name);
+        if (globals_.set(name, peek(0))) {
+          globals_.del(name);
           runtime_error("Undefined variable '" + name->string + "'.");
           return INTERPRET_RUNTIME_ERROR;
         }
@@ -124,17 +126,60 @@ InterpretResult VM::run() {
         *frame_top_->closure->upvalues[slot]->location = peek(0);
         break;
       }
+      case OP_GET_PROPERTY: {
+        if (!IS_INSTANCE(peek(0))) {
+          runtime_error("Only instances have properties.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+
+        ObjInstance* instance = AS_INSTANCE(peek(0));
+        ObjString* name = AS_STRING(read_constant());
+
+        Value value{NIL_VAL};
+        if (instance->fields.get(name, &value)) {
+          pop();
+          push(value);
+          break;
+        }
+
+        if (!bind_method(instance->class_, name)) {
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        break;
+      }
+      case OP_SET_PROPERTY: {
+        if (!IS_INSTANCE(peek(1))) {
+          runtime_error("Only instances have fields.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+
+        ObjInstance* instance = AS_INSTANCE(peek(1));
+        instance->fields.set(AS_STRING(read_constant()), peek(0));
+        const Value value = pop();
+        pop();
+        push(value);
+        break;
+      }
+      case OP_GET_SUPER: {
+        ObjString* name = AS_STRING(read_constant());
+        ObjClass* superclass = AS_CLASS(pop());
+
+        if (!bind_method(superclass, name)) {
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        break;
+      }
       case OP_EQUAL: {
         const Value b = pop();
         const Value a = pop();
-        push(Value{a == b});
+        push(BOOL_VAL(values_equal(a, b)));
         break;
       }
       case OP_GREATER:
-        BINARY_OP(>);
+        BINARY_OP(BOOL_VAL, >);
         break;
       case OP_LESS:
-        BINARY_OP(<);
+        BINARY_OP(BOOL_VAL, <);
         break;
       case OP_ADD:
         if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
@@ -143,37 +188,37 @@ InterpretResult VM::run() {
           auto* string = allocate_object<ObjString>(a->string + b->string);
           pop();
           pop();
-          push(Value{string});
+          push(OBJ_VAL(string));
         } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
           const double b = AS_NUMBER(pop());
           const double a = AS_NUMBER(pop());
-          push(Value{a + b});
+          push(NUMBER_VAL(a + b));
         } else {
           runtime_error("Operands must be two numbers or two strings.");
           return INTERPRET_RUNTIME_ERROR;
         }
         break;
       case OP_SUBTRACT:
-        BINARY_OP(-);
+        BINARY_OP(NUMBER_VAL, -);
         break;
       case OP_MULTIPLY:
-        BINARY_OP(*);
+        BINARY_OP(NUMBER_VAL, *);
         break;
       case OP_DIVIDE:
-        BINARY_OP(/);
+        BINARY_OP(NUMBER_VAL, /);
         break;
       case OP_NOT:
-        push(Value{pop().is_falsey()});
+        push(BOOL_VAL(is_falsey(pop())));
         break;
       case OP_NEGATE:
         if (!IS_NUMBER(peek(0))) {
           runtime_error("Operand must be a number.");
           return INTERPRET_RUNTIME_ERROR;
         }
-        push(Value{-AS_NUMBER(pop())});
+        push(NUMBER_VAL(-AS_NUMBER(pop())));
         break;
       case OP_PRINT:
-        pop().print();
+        print_value(pop());
         std::cout << '\n';
         break;
       case OP_JUMP: {
@@ -183,7 +228,7 @@ InterpretResult VM::run() {
       }
       case OP_JUMP_IF_FALSE: {
         const uint16_t offset = read_short();
-        if (peek(0).is_falsey()) {
+        if (is_falsey(peek(0))) {
           frame_top_->ip += offset;
         }
         break;
@@ -201,10 +246,29 @@ InterpretResult VM::run() {
         frame_top_ = &frames_[frame_count_ - 1];
         break;
       }
+      case OP_INVOKE: {
+        ObjString* method = AS_STRING(read_constant());
+        const int arg_count = read_byte();
+        if (!invoke(method, arg_count)) {
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        frame_top_ = &frames_[frame_count_ - 1];
+        break;
+      }
+      case OP_SUPER_INVOKE: {
+        ObjString* method = AS_STRING(read_constant());
+        const int arg_count = read_byte();
+        ObjClass* superclass = AS_CLASS(pop());
+        if (!invoke_from_class(superclass, method, arg_count)) {
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        frame_top_ = &frames_[frame_count_ - 1];
+        break;
+      }
       case OP_CLOSURE: {
         ObjFunction* function = AS_FUNCTION(read_constant());
         auto* closure = allocate_object<ObjClosure>(function);
-        push(Value{closure});
+        push(OBJ_VAL(closure));
         for (int i = 0; i < closure->upvalue_count; i++) {
           const uint8_t is_local = read_byte();
           const uint8_t index = read_byte();
@@ -216,6 +280,10 @@ InterpretResult VM::run() {
         }
         break;
       }
+      case OP_CLOSE_UPVALUE:
+        close_upvalues(stack_top_ - 1);
+        pop();
+        break;
       case OP_RETURN: {
         const Value result = pop();
         close_upvalues(frame_top_->slots);
@@ -228,9 +296,23 @@ InterpretResult VM::run() {
         frame_top_ = &frames_[frame_count_ - 1];
         break;
       }
-      case OP_CLOSE_UPVALUE:
-        close_upvalues(stack_top_ - 1);
+      case OP_CLASS:
+        push(OBJ_VAL(allocate_object<ObjClass>(AS_STRING(read_constant()))));
+        break;
+      case OP_INHERIT: {
+        const Value superclass = peek(1);
+        if (!IS_CLASS(superclass)) {
+          runtime_error("Superclass must be a class.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+
+        ObjClass* subclass = AS_CLASS(peek(0));
+        AS_CLASS(superclass)->methods.add_all(subclass->methods);
         pop();
+        break;
+      }
+      case OP_METHOD:
+        define_method(AS_STRING(read_constant()));
         break;
       default:
         break;
@@ -240,9 +322,76 @@ InterpretResult VM::run() {
 #undef BINARY_OP
 }
 
+void VM::define_method(ObjString* name) {
+  const Value method = peek(0);
+  ObjClass* class_ = AS_CLASS(peek(1));
+  class_->methods.set(name, method);
+  pop();
+}
+
+bool VM::bind_method(ObjClass* class_, ObjString* name) {
+  Value method{NIL_VAL};
+  if (!class_->methods.get(name, &method)) {
+    runtime_error("Undefined property '" + name->string + "'.");
+    return false;
+  }
+
+  auto* bound = allocate_object<ObjBoundMethod>(peek(0), AS_CLOSURE(method));
+
+  pop();
+  push(OBJ_VAL(bound));
+  return true;
+}
+
+bool VM::invoke_from_class(ObjClass* class_, ObjString* name, int arg_count) {
+  Value method{NIL_VAL};
+  if (!class_->methods.get(name, &method)) {
+    runtime_error("Undefined property '" + name->string + "'.");
+    return false;
+  }
+  return call(AS_CLOSURE(method), arg_count);
+}
+
+bool VM::invoke(ObjString* name, int arg_count) {
+  const Value receiver = peek(arg_count);
+  if (!IS_INSTANCE(receiver)) {
+    runtime_error("Only instances have methods.");
+    return false;
+  }
+
+  ObjInstance* instance = AS_INSTANCE(receiver);
+
+  Value value{NIL_VAL};
+  if (instance->fields.get(name, &value)) {
+    stack_top_[-arg_count - 1] = value;
+    return call_value(value, arg_count);
+  }
+
+  return invoke_from_class(instance->class_, name, arg_count);
+}
+
 bool VM::call_value(Value callee, int arg_count) {
   if (IS_OBJ(callee)) {
     switch (OBJ_TYPE(callee)) {
+      case OBJ_BOUND_METHOD: {
+        ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
+        stack_top_[-arg_count - 1] = bound->receiver;
+        return call(bound->method, arg_count);
+      }
+      case OBJ_CLASS: {
+        ObjClass* class_ = AS_CLASS(callee);
+        stack_top_[-arg_count - 1] =
+            OBJ_VAL(allocate_object<ObjInstance>(class_));
+        Value initializer{NIL_VAL};
+        if (class_->methods.get(init_string_, &initializer)) {
+          return call(AS_CLOSURE(initializer), arg_count);
+        } else if (arg_count != 0) {
+          runtime_error("Expected 0 arguments but got " +
+                        std::to_string(arg_count) + ".");
+          return false;
+        }
+        return true;
+      }
       case OBJ_CLOSURE:
         return call(AS_CLOSURE(callee), arg_count);
       case OBJ_NATIVE: {
@@ -280,8 +429,10 @@ bool VM::call(ObjClosure* closure, int arg_count) {
 }
 
 void VM::reset_stack() {
-  stack_.fill({});
+  frame_count_ = 0;
+  stack_.fill(NIL_VAL);
   stack_top_ = stack_.data();
+  open_upvalues_ = nullptr;
 }
 
 ObjUpvalue* VM::capture_upvalue(Value* local) {
@@ -308,7 +459,7 @@ ObjUpvalue* VM::capture_upvalue(Value* local) {
   return created_upvalue;
 }
 
-void VM::close_upvalues(Value* last) {
+void VM::close_upvalues(const Value* last) {
   while (open_upvalues_ != nullptr && open_upvalues_->location >= last) {
     ObjUpvalue* upvalue = open_upvalues_;
     upvalue->closed = *upvalue->location;
@@ -347,7 +498,7 @@ void VM::mark_object(Obj* object) {
 
 #ifdef DEBUG_LOG_GC
   std::cout << (void*)object << " mark ";
-  Value{object}.print();
+  print_value(OBJ_VAL(object));
   std::cout << '\n';
 #endif
 
@@ -373,11 +524,23 @@ void VM::mark_table(const Table& table) {
 void VM::blacken_object(Obj* object) {
 #ifdef DEBUG_LOG_GC
   std::cout << (void*)object << " blacken ";
-  Value{object}.print();
+  print_value(OBJ_VAL(object));
   std::cout << '\n';
 #endif
 
   switch (object->type) {
+    case OBJ_BOUND_METHOD: {
+      auto* bound = static_cast<ObjBoundMethod*>(object);
+      mark_value(bound->receiver);
+      mark_object(bound->method);
+      break;
+    }
+    case OBJ_CLASS: {
+      auto* class_ = static_cast<ObjClass*>(object);
+      mark_object(class_->name);
+      mark_table(class_->methods);
+      break;
+    }
     case OBJ_CLOSURE: {
       auto* closure = static_cast<ObjClosure*>(object);
       mark_object(closure->function);
@@ -388,10 +551,16 @@ void VM::blacken_object(Obj* object) {
     }
     case OBJ_FUNCTION: {
       auto* function = static_cast<ObjFunction*>(object);
-      mark_object((Obj*)function->name);
+      mark_object(function->name);
       for (auto i : function->chunk.get_constants()) {
         mark_value(i);
       }
+      break;
+    }
+    case OBJ_INSTANCE: {
+      auto* instance = static_cast<ObjInstance*>(object);
+      mark_object(instance->class_);
+      mark_table(instance->fields);
       break;
     }
     case OBJ_UPVALUE:
@@ -410,7 +579,7 @@ void VM::collect_garbage() {
 
   mark_roots();
   trace_references();
-  strings.remove_white();
+  strings_.remove_white();
   sweep();
 
   next_gc_ = bytes_allocated_ * GC_HEAP_GROW_FACTOR;
@@ -424,7 +593,7 @@ void VM::collect_garbage() {
 }
 
 void VM::free_objects() {
-  Obj* object = objects;
+  Obj* object = objects_;
   while (object != nullptr) {
     Obj* next = object->next_object;
 #ifdef DEBUG_LOG_GC
@@ -440,10 +609,11 @@ void VM::mark_roots() {
     mark_value(*slot);
   }
 
-  mark_table(globals);
+  mark_table(globals_);
   if (g_current_compiler != nullptr) {
     g_current_compiler->mark_compiler_roots();
   }
+  mark_object(init_string_);
 
   for (int i = 0; i < frame_count_; i++) {
     mark_object(static_cast<Obj*>(frames_[i].closure));
@@ -465,7 +635,7 @@ void VM::trace_references() {
 
 void VM::sweep() {
   Obj* previous = nullptr;
-  Obj* object = objects;
+  Obj* object = objects_;
   while (object != nullptr) {
     if (object->is_marked) {
       object->is_marked = false;
@@ -477,15 +647,24 @@ void VM::sweep() {
       if (previous != nullptr) {
         previous->next_object = object;
       } else {
-        objects = object;
+        objects_ = object;
       }
 
       switch (unreached->type) {
+        case OBJ_BOUND_METHOD:
+          bytes_allocated_ -= sizeof(ObjBoundMethod);
+          break;
+        case OBJ_CLASS:
+          bytes_allocated_ -= sizeof(ObjClass);
+          break;
         case OBJ_CLOSURE:
           bytes_allocated_ -= sizeof(ObjClosure);
           break;
         case OBJ_FUNCTION:
           bytes_allocated_ -= sizeof(ObjFunction);
+          break;
+        case OBJ_INSTANCE:
+          bytes_allocated_ -= sizeof(ObjInstance);
           break;
         case OBJ_NATIVE:
           bytes_allocated_ -= sizeof(ObjNative);

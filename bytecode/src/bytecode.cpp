@@ -16,7 +16,7 @@ static InterpretResult run(const std::string& source) {
     return INTERPRET_COMPILE_ERROR;
   }
 
-  return vm.interpret(function);
+  return g_vm.interpret(function);
 }
 
 int run_file(const std::string& path) {
@@ -26,7 +26,7 @@ int run_file(const std::string& path) {
                            std::istreambuf_iterator<char>{}};
 
   const InterpretResult result = run(source);
-  vm.free_objects();
+  g_vm.free_objects();
 
   if (result == INTERPRET_COMPILE_ERROR) {
     return 65;
@@ -50,6 +50,6 @@ void run_prompt() {
 
     run(source_line);
   }
-  vm.free_objects();
+  g_vm.free_objects();
 }
 }  // namespace lox::bytecode
