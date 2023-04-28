@@ -3,11 +3,11 @@
 #include "runtime_error.hpp"
 
 namespace lox::treewalk {
-Environment::Environment(const Ref<Environment>& enclosing)
+Environment::Environment(const std::shared_ptr<Environment>& enclosing)
     : enclosing_{enclosing} {}
 
-Object& Environment::get(const Token& name) {
-  if (auto it = values_.find(name.get_lexeme()); it != values_.end()) {
+const Value& Environment::get(const Token& name) {
+  if (auto it = values_.find(name.lexeme); it != values_.end()) {
     return it->second;
   }
 
@@ -15,15 +15,16 @@ Object& Environment::get(const Token& name) {
     return enclosing_->get(name);
   }
 
-  throw RuntimeError(name, "Undefined variable '" + name.get_lexeme() + "'.");
+  throw RuntimeError{name,
+                     "Undefined variable '" + std::string{name.lexeme} + "'."};
 }
 
-Object& Environment::get_at(int distance, const Token& name) {
+const Value& Environment::get_at(int distance, const Token& name) {
   return ancestor(distance).get(name);
 }
 
-void Environment::assign(const Token& name, const Object& value) {
-  if (auto it = values_.find(name.get_lexeme()); it != values_.end()) {
+void Environment::assign(const Token& name, const Value& value) {
+  if (auto it = values_.find(name.lexeme); it != values_.end()) {
     it->second = value;
     return;
   }
@@ -32,16 +33,17 @@ void Environment::assign(const Token& name, const Object& value) {
     return enclosing_->assign(name, value);
   }
 
-  throw RuntimeError(name, "Undefined variable '" + name.get_lexeme() + "'.");
+  throw RuntimeError{name,
+                     "Undefined variable '" + std::string{name.lexeme} + "'."};
 }
 
 void Environment::assign_at(int distance, const Token& name,
-                            const Object& value) {
+                            const Value& value) {
   ancestor(distance).assign(name, value);
 }
 
-void Environment::define(const std::string& name, const Object& value) {
-  values_.insert_or_assign(name, value);
+void Environment::define(std::string name, const Value& value) {
+  values_.insert_or_assign(std::move(name), value);
 }
 
 Environment& Environment::ancestor(int distance) {

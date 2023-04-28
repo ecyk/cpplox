@@ -4,8 +4,17 @@
 #include <string>
 #include <vector>
 
-template <typename Type, typename Deleter = std::default_delete<Type>>
-using Scope = std::unique_ptr<Type, Deleter>;
-
-template <typename Type>
-using Ref = std::shared_ptr<Type>;
+namespace lox::treewalk {
+struct Hash {
+  using is_transparent = void;
+  [[nodiscard]] size_t operator()(const char* string) const {
+    return std::hash<std::string_view>{}(string);
+  }
+  [[nodiscard]] size_t operator()(std::string_view string) const {
+    return std::hash<std::string_view>{}(string);
+  }
+  [[nodiscard]] size_t operator()(const std::string& string) const {
+    return std::hash<std::string>{}(string);
+  }
+};
+}  // namespace lox::treewalk

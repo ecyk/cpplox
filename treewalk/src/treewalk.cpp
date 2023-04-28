@@ -10,21 +10,21 @@
 #include "scanner.hpp"
 
 namespace lox::treewalk {
-static bool s_had_error{};
-static bool s_had_runtime_error{};
+static bool g_had_error{};
+static bool g_had_runtime_error{};
 
 static void run(const std::string& source) {
   Scanner scanner{source};
-  std::vector<Token> tokens = scanner.scan_tokens();
+  std::vector<lox::Token> tokens = scanner.scan_tokens();
 
   // for (auto& token : tokens) {
   //   std::cout << token.to_string() << '\n';
   // }
 
   Parser parser{std::move(tokens)};
-  const std::vector<Scope<Stmt>> statements = parser.parse();
+  std::vector<std::unique_ptr<Stmt>> statements = parser.parse();
 
-  if (s_had_error) {
+  if (g_had_error) {
     return;
   }
 
@@ -34,7 +34,7 @@ static void run(const std::string& source) {
   Resolver resolver;
   resolver.resolve(statements);
 
-  if (s_had_error) {
+  if (g_had_error) {
     return;
   }
 
@@ -50,10 +50,10 @@ int run_file(const std::string& path) {
 
   run(source);
 
-  if (s_had_error) {
+  if (g_had_error) {
     return 65;
   }
-  if (s_had_runtime_error) {
+  if (g_had_runtime_error) {
     return 70;
   }
 
@@ -71,21 +71,21 @@ void run_prompt() {
     }
 
     run(source_line);
-    s_had_error = false;
+    g_had_error = false;
   }
 }
 
 void runtime_error(const RuntimeError& error) {
   std::cerr << std::string{error.what()} + "\n[line " +
-                   std::to_string(error.token_.get_line()) + "]\n";
-  s_had_runtime_error = true;
+                   std::to_string(error.token.line) + "]\n";
+  g_had_runtime_error = true;
 }
 
-void error(const Token& token, const std::string& message) {
-  if (token.get_type() == TokenType::EOF_) {
-    report(token.get_line(), " at end", message);
+void error(const lox::Token& token, const std::string& message) {
+  if (token.type == TOKEN_EOF) {
+    report(token.line, " at end", message);
   } else {
-    report(token.get_line(), " at '" + token.get_lexeme() + "'", message);
+    report(token.line, " at '" + std::string{token.lexeme} + "'", message);
   }
 }
 
@@ -97,6 +97,6 @@ void report(size_t line, const std::string& where, const std::string& message) {
   std::cerr << "[line " + std::to_string(line) + "] Error" + where + ": " +
                    message
             << '\n';
-  s_had_error = true;
+  g_had_error = true;
 }
 }  // namespace lox::treewalk

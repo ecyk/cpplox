@@ -1,35 +1,35 @@
 #include "ast_printer.hpp"
 
 namespace lox::treewalk {
-std::string AstPrinter::print(const Scope<Expr>& expr) {
+std::string AstPrinter::print(const std::unique_ptr<Expr>& expr) {
   expr->accept(*this);
   return str_;
 }
 
 void AstPrinter::visit(expr::Binary& binary) {
-  str_ += "(" + binary.op_.get_lexeme();
+  str_ += "(" + std::string{binary.op.lexeme};
   str_ += " ";
-  binary.left_->accept(*this);
+  binary.left->accept(*this);
   str_ += " ";
-  binary.right_->accept(*this);
+  binary.right->accept(*this);
   str_ += ")";
 }
 
 void AstPrinter::visit(expr::Grouping& grouping) {
   str_ += "(group";
   str_ += " ";
-  grouping.expr_->accept(*this);
+  grouping.expr->accept(*this);
   str_ += ")";
 }
 
 void AstPrinter::visit(expr::Literal& literal) {
-  str_ += literal.value_.stringify();
+  // str_ += literal.value_.stringify();
 }
 
 void AstPrinter::visit(expr::Unary& unary) {
-  str_ += "(" + unary.op_.get_lexeme();
+  str_ += "(" + std::string{unary.op.lexeme};
   str_ += " ";
-  unary.right_->accept(*this);
+  unary.right->accept(*this);
   str_ += ")";
 }
 }  // namespace lox::treewalk

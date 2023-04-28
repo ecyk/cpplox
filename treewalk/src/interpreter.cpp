@@ -6,36 +6,38 @@
 #include "treewalk.hpp"
 
 namespace lox::treewalk {
-class Clock : public Function {
- public:
-  Object call(const std::vector<Object>& /*arguments*/) override {
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                  std::chrono::system_clock::now().time_since_epoch())
-                  .count();
+static Value clock_native(int /*arg_count*/, Value* /*args*/) {
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                .count();
 
-    constexpr double ms_to_seconds = 1.0 / 1000;
-    return Object{static_cast<double>(ms) * ms_to_seconds};
-  }
-};
+  constexpr double ms_to_seconds = 1.0 / 1000;
+  return static_cast<double>(ms) * ms_to_seconds;
+}
 
 Interpreter::Interpreter()
     : environment_{std::make_shared<Environment>()},
       globals_{environment_.get()} {
-  environment_->define("clock", Object{std::make_shared<Clock>()});
+  environment_->define("clock", std::make_shared<Native>(clock_native, 0));
 }
 
-void Interpreter::interpret(const std::vector<Scope<Stmt>>& statements) {
+void Interpreter::interpret(std::vector<std::unique_ptr<Stmt>>& statements) {
   try {
-    for (const auto& statement : statements) {
+    for (auto& statement : statements) {
       execute(statement);
     }
   } catch (const RuntimeError& e) {
     runtime_error(e);
   }
+
+  statements_.insert(statements_.end(),
+                     std::make_move_iterator(statements.begin()),
+                     std::make_move_iterator(statements.end()));
 }
 
-void Interpreter::execute_block(const std::vector<Scope<Stmt>>& statements,
-                                const Ref<Environment>& environment) {
+void Interpreter::execute_block(
+    const std::vector<std::unique_ptr<Stmt>>& statements,
+    std::shared_ptr<Environment> environment) {
   if (statements.empty()) {
     return_value_ = {};
     return;
@@ -44,7 +46,7 @@ void Interpreter::execute_block(const std::vector<Scope<Stmt>>& statements,
   auto previous = std::move(environment_);
 
   // try {
-  environment_ = environment;
+  environment_ = std::move(environment);
 
   for (const auto& statement : statements) {
     execute(statement);
@@ -57,7 +59,7 @@ void Interpreter::execute_block(const std::vector<Scope<Stmt>>& statements,
   environment_ = std::move(previous);
 }
 
-void Interpreter::execute(const Scope<Stmt>& stmt) {
+void Interpreter::execute(const std::unique_ptr<Stmt>& stmt) {
   if (is_returning_) {
     return;
   }
@@ -66,68 +68,78 @@ void Interpreter::execute(const Scope<Stmt>& stmt) {
 }
 
 void Interpreter::visit(stmt::Block& block) {
-  execute_block(block.statements_, std::make_shared<Environment>(environment_));
+  execute_block(block.statements, std::make_shared<Environment>(environment_));
 }
 
 void Interpreter::visit(stmt::Class& class_) {
-  Object* superclass = nullptr;
-  if (class_.superclass_) {
-    superclass =
-        &look_up_variable(class_.superclass_->name_, *class_.superclass_);
-    if (!superclass->is<Class>()) {
-      throw RuntimeError(class_.superclass_->name_,
-                         "Superclass must be a class.");
+  Value superclass;
+  if (class_.superclass) {
+    superclass = look_up_variable(class_.superclass->name, *class_.superclass);
+    if (!IS_CLASS(superclass)) {
+      throw RuntimeError{class_.superclass->name,
+                         "Superclass must be a class."};
     }
   }
 
-  environment_->define(class_.name_.get_lexeme(), {});
+  environment_->define(std::string{class_.name.lexeme}, {});
 
-  if (superclass != nullptr) {
+  if (!IS_NIL(superclass)) {
     environment_ = std::make_shared<Environment>(environment_);
-    environment_->define("super", *superclass);
+    environment_->define("super", superclass);
   }
 
-  Class::Methods methods;
-  for (auto& method : class_.methods_) {
-    const auto& name = method.name_.get_lexeme();
+  Methods methods;
+  for (auto& method : class_.methods) {
     methods.insert_or_assign(
-        name, Function{environment_, name == "init", &method, this});
+        std::string{method.name.lexeme},
+        Function{environment_, &method, static_cast<int>(method.params.size()),
+                 method.name.lexeme == "init"});
   }
 
-  if (superclass != nullptr) {
+  if (!IS_NIL(superclass)) {
     environment_ = environment_->enclosing();
   }
 
-  environment_->assign(
-      class_.name_,
-      Object{std::make_shared<Class>(std::move(methods), superclass, &class_)});
+  auto class_object = std::make_shared<Class>(
+      std::move(methods), &class_,
+      IS_CLASS(superclass) ? AS_CLASS(superclass).get() : nullptr, nullptr, 0);
+
+  class_object->initializer = find_method(*class_object, "init");
+  if (class_object->initializer != nullptr) {
+    class_object->arity =
+        static_cast<int>(class_object->initializer->declaration->params.size());
+  }
+
+  environment_->assign(class_.name, class_object);
 }
 
 void Interpreter::visit(stmt::Expression& expression) {
-  evaluate(expression.expr_);
+  evaluate(expression.expr);
 }
 
 void Interpreter::visit(stmt::Function& function) {
-  environment_->define(
-      function.name_.get_lexeme(),
-      Object{std::make_shared<Function>(environment_, false, &function, this)});
+  environment_->define(std::string{function.name.lexeme},
+                       {std::make_shared<Function>(
+                           environment_, &function,
+                           static_cast<int>(function.params.size()), false)});
 }
 
 void Interpreter::visit(stmt::If& if_) {
-  if (evaluate(if_.condition_).is_truthy()) {
-    execute(if_.then_branch_);
-  } else if (if_.else_branch_) {
-    execute(if_.else_branch_);
+  if (!is_falsey(evaluate(if_.condition))) {
+    execute(if_.then_branch);
+  } else if (if_.else_branch) {
+    execute(if_.else_branch);
   }
 }
 
 void Interpreter::visit(stmt::Print& print) {
-  std::cout << evaluate(print.expr_).stringify() << '\n';
+  print_value(evaluate(print.expr));
+  std::cout << '\n';
 }
 
 void Interpreter::visit(stmt::Return& return_) {
-  if (return_.value_) {
-    evaluate(return_.value_);
+  if (return_.value) {
+    evaluate(return_.value);
   } else {
     return_value_ = {};
   }
@@ -137,90 +149,89 @@ void Interpreter::visit(stmt::Return& return_) {
 }
 
 void Interpreter::visit(stmt::Var& var) {
-  if (var.initializer_) {
-    evaluate(var.initializer_);
+  if (var.initializer) {
+    evaluate(var.initializer);
   } else {
     return_value_ = {};
   }
 
-  environment_->define(var.name_.get_lexeme(), return_value_);
+  environment_->define(std::string{var.name.lexeme}, return_value_);
 }
 
 void Interpreter::visit(stmt::While& while_) {
   while (!is_returning_) {
-    if (!evaluate(while_.condition_).is_truthy()) {
+    if (is_falsey(evaluate(while_.condition))) {
       return;
     }
-    execute(while_.body_);
+    execute(while_.body);
   }
 }
 
-Object& Interpreter::evaluate(const Scope<Expr>& expr) {
+Value& Interpreter::evaluate(const std::unique_ptr<Expr>& expr) {
   expr->accept(*this);
-
   return return_value_;
 }
 
 void Interpreter::visit(expr::Assign& assign) {
-  const auto& value = evaluate(assign.value_);
-  const int distance = assign.depth_;
+  const Value& value = evaluate(assign.value);
+  const int distance = assign.depth;
   if (distance >= 0) {
-    environment_->assign_at(distance, assign.name_, value);
+    environment_->assign_at(distance, assign.name, value);
   } else {
-    globals_->assign(assign.name_, value);
+    globals_->assign(assign.name, value);
   }
 }
 
 void Interpreter::visit(expr::Binary& binary) {
-  auto left = evaluate(binary.left_);
-  const auto& right = evaluate(binary.right_);
+  Value left = evaluate(binary.left);
+  const Value& right = evaluate(binary.right);
 
-  switch (binary.op_.get_type()) {
-    case TokenType::BANG_EQUAL:
-      return_value_ = Object{!(left == right)};
+  switch (binary.op.type) {
+    case TOKEN_BANG_EQUAL:
+      return_value_ = {!(left == right)};
       break;
-    case TokenType::EQUAL_EQUAL:
-      return_value_ = Object{left == right};
+    case TOKEN_EQUAL_EQUAL:
+      return_value_ = {left == right};
       break;
-    case TokenType::GREATER:
-      check_number_operands(binary.op_, left, right);
-      return_value_ = Object{left.as<Number>() > right.as<Number>()};
+    case TOKEN_GREATER:
+      check_number_operands(binary.op, left, right);
+      return_value_ = {AS_NUMBER(left) > AS_NUMBER(right)};
       break;
-    case TokenType::GREATER_EQUAL:
-      check_number_operands(binary.op_, left, right);
-      return_value_ = Object{left.as<Number>() >= right.as<Number>()};
+    case TOKEN_GREATER_EQUAL:
+      check_number_operands(binary.op, left, right);
+      return_value_ = {AS_NUMBER(left) >= AS_NUMBER(right)};
       break;
-    case TokenType::LESS:
-      check_number_operands(binary.op_, left, right);
-      return_value_ = Object{left.as<Number>() < right.as<Number>()};
+    case TOKEN_LESS:
+      check_number_operands(binary.op, left, right);
+      return_value_ = {AS_NUMBER(left) < AS_NUMBER(right)};
       break;
-    case TokenType::LESS_EQUAL:
-      check_number_operands(binary.op_, left, right);
-      return_value_ = Object{left.as<Number>() <= right.as<Number>()};
+    case TOKEN_LESS_EQUAL:
+      check_number_operands(binary.op, left, right);
+      return_value_ = {AS_NUMBER(left) <= AS_NUMBER(right)};
       break;
-    case TokenType::MINUS:
-      check_number_operands(binary.op_, left, right);
-      return_value_ = Object{left.as<Number>() - right.as<Number>()};
+    case TOKEN_MINUS:
+      check_number_operands(binary.op, left, right);
+      return_value_ = {AS_NUMBER(left) - AS_NUMBER(right)};
       break;
-    case TokenType::PLUS:
-      if (left.is<Number>() && right.is<Number>()) {
-        return_value_ = Object{left.as<Number>() + right.as<Number>()};
+    case TOKEN_PLUS:
+      if (IS_NUMBER(left) && IS_NUMBER(right)) {
+        return_value_ = {AS_NUMBER(left) + AS_NUMBER(right)};
         break;
       }
-      if (left.is<String>() && right.is<String>()) {
-        return_value_ = Object{left.as<String>() + right.as<String>()};
+      if (IS_STRING(left) && IS_STRING(right)) {
+        return_value_ = {AS_STRING(left) + AS_STRING(right)};
         break;
       }
 
-      throw RuntimeError(binary.op_,
-                         "Operands must be two numbers or two strings.");
-    case TokenType::SLASH:
-      check_number_operands(binary.op_, left, right);
-      return_value_ = Object{left.as<Number>() / right.as<Number>()};
+      throw RuntimeError{binary.op,
+                         "Operands must be two numbers or two strings."};
+    case TOKEN_SLASH:
+      check_number_operands(binary.op, left, right);
+      return_value_ = {AS_NUMBER(left) / AS_NUMBER(right)};
       break;
-    case TokenType::STAR:
-      check_number_operands(binary.op_, left, right);
-      return_value_ = Object{left.as<Number>() * right.as<Number>()};
+    case TOKEN_STAR:
+      check_number_operands(binary.op, left, right);
+      return_value_ = {AS_NUMBER(left) * AS_NUMBER(right)};
       break;
     default:
       return_value_ = {};
@@ -229,117 +240,104 @@ void Interpreter::visit(expr::Binary& binary) {
 }
 
 void Interpreter::visit(expr::Call& call) {
-  auto callee = evaluate(call.callee_);
+  const Value callee = evaluate(call.callee);
 
-  std::vector<Object> arguments;
-  arguments.reserve(call.arguments_.size());
-  for (const auto& argument : call.arguments_) {
+  std::vector<Value> arguments;
+  arguments.reserve(call.arguments.size());
+  for (const auto& argument : call.arguments) {
     arguments.push_back(evaluate(argument));
   }
 
-  if (!(callee.is<Function>() || callee.is<Class>())) {
-    throw RuntimeError(call.paren_, "Can only call functions and classes.");
-  }
-
-  const int arity = callee.arity();
-  if (arguments.size() != arity) {
-    throw RuntimeError(call.paren_, "Expected " + std::to_string(arity) +
-                                        " arguments but got " +
-                                        std::to_string(arguments.size()) + ".");
-  }
-
-  auto value = callee.call(arguments);
-  if (!is_returning_ || !value.is<Nil>()) {
-    return_value_ = value;
-  }
-
+  return_value_ = call_value(callee, arguments, call.paren);
   is_returning_ = false;
 }
 
 void Interpreter::visit(expr::Get& get) {
-  if (const auto& object = evaluate(get.object_); object.is<Instance>()) {
-    const auto& instance = object.as<Instance>();
+  const Value& value = evaluate(get.object);
+  if (IS_INSTANCE(value)) {
+    const auto& instance = AS_INSTANCE(value);
 
-    if (const Object* field = instance.get_field(get.name_.get_lexeme())) {
+    if (Value* field = find_field(*instance, get.name.lexeme)) {
       return_value_ = *field;
       return;
     }
 
-    if (const Function* method = instance.get_method(get.name_.get_lexeme())) {
-      return_value_ = Object{method->bind(object)};
+    if (Function* method = find_method(*instance->class_, get.name.lexeme)) {
+      return_value_ = {bind_function(method, instance)};
       return;
     }
 
-    throw RuntimeError(get.name_,
-                       "Undefined property '" + get.name_.get_lexeme() + "'.");
+    throw RuntimeError{
+        get.name, "Undefined property '" + std::string{get.name.lexeme} + "'."};
   }
 
-  throw RuntimeError(get.name_, "Only instances have properties.");
+  throw RuntimeError{get.name, "Only instances have properties."};
 }
 
-void Interpreter::visit(expr::Grouping& grouping) { evaluate(grouping.expr_); }
+void Interpreter::visit(expr::Grouping& grouping) { evaluate(grouping.expr); }
 
 void Interpreter::visit(expr::Literal& literal) {
-  return_value_ = literal.value_;
+  return_value_ = literal.value;
 }
 
 void Interpreter::visit(expr::Logical& logical) {
-  const auto& left = evaluate(logical.left_);
+  const Value& left = evaluate(logical.left);
 
-  if (logical.op_.get_type() == TokenType::OR) {
-    if (left.is_truthy()) {
+  if (logical.op.type == TOKEN_OR) {
+    if (!is_falsey(left)) {
       return;
     }
   } else {
-    if (!left.is_truthy()) {
+    if (is_falsey(left)) {
       return;
     }
   }
 
-  evaluate(logical.right_);
+  evaluate(logical.right);
 }
 
 void Interpreter::visit(expr::Set& set) {
-  auto& object = evaluate(set.object_);
+  Value& object = evaluate(set.object);
 
-  if (!object.is<Instance>()) {
-    throw RuntimeError(set.name_, "Only instances have fields.");
+  if (!IS_INSTANCE(object)) {
+    throw RuntimeError{set.name, "Only instances have fields."};
   }
 
-  object.as<Instance>().set_field(set.name_.get_lexeme(), evaluate(set.value_));
+  AS_INSTANCE(object)->fields.insert_or_assign(std::string{set.name.lexeme},
+                                               evaluate(set.value));
 }
 
 void Interpreter::visit(expr::This& this_) {
-  return_value_ = look_up_variable(this_.keyword_, this_);
+  return_value_ = look_up_variable(this_.keyword, this_);
 }
 
 void Interpreter::visit(expr::Super& super) {
-  const Function* method =
-      environment_->get_at(super.depth_, Token{TokenType::SUPER, "super", 0})
-          .as<Class>()
-          .find_method(super.method_.get_lexeme());
+  Function* method = find_method(
+      *AS_CLASS(environment_->get_at(super.depth, {TOKEN_SUPER, "super", 0})),
+      super.method.lexeme);
 
   if (method == nullptr) {
-    throw RuntimeError(super.method_, "Undefined property '" +
-                                          super.method_.get_lexeme() + "'.");
+    throw RuntimeError{
+        super.method,
+        "Undefined property '" + std::string{super.method.lexeme} + "'."};
   }
 
-  const auto& object =
-      environment_->get_at(super.depth_ - 1, Token{TokenType::THIS, "this", 0});
+  const Value& this_ =
+      environment_->get_at(super.depth - 1, {TOKEN_THIS, "this", 0});
 
-  return_value_ = Object{method->bind(object)};
+  return_value_ = {bind_function(method, AS_INSTANCE(this_))};
 }
 
 void Interpreter::visit(expr::Unary& unary) {
-  const auto& right = evaluate(unary.right_);
+  const Value& right = evaluate(unary.right);
 
-  switch (unary.op_.get_type()) {
-    case TokenType::BANG:
-      return_value_ = Object{!right.is_truthy()};
+  switch (unary.op.type) {
+    case TOKEN_BANG:
+      return_value_ = {is_falsey(right)};
       break;
-    case TokenType::MINUS:
-      check_number_operand(unary.op_, right);
-      return_value_ = Object{-right.as<Number>()};
+    case TOKEN_MINUS:
+      check_number_operand(unary.op, right);
+      return_value_ = {-AS_NUMBER(right)};
       break;
     default:
       return_value_ = {};
@@ -348,12 +346,12 @@ void Interpreter::visit(expr::Unary& unary) {
 }
 
 void Interpreter::visit(expr::Variable& variable) {
-  return_value_ = look_up_variable(variable.name_, variable);
+  return_value_ = look_up_variable(variable.name, variable);
 }
 
-Object& Interpreter::look_up_variable(const Token& name,
-                                      const expr::Expr& expr) {
-  const int distance = expr.depth_;
+const Value& Interpreter::look_up_variable(const lox::Token& name,
+                                           const expr::Expr& expr) {
+  const int distance = expr.depth;
   if (distance >= 0) {
     return environment_->get_at(distance, name);
   }
@@ -361,20 +359,118 @@ Object& Interpreter::look_up_variable(const Token& name,
   return globals_->get(name);
 }
 
-void Interpreter::check_number_operand(const Token& op, const Object& operand) {
-  if (operand.is<Number>()) {
+void Interpreter::check_number_operand(const lox::Token& op,
+                                       const Value& operand) {
+  if (IS_NUMBER(operand)) {
     return;
   }
 
-  throw RuntimeError(op, "Operand must be a number.");
+  throw RuntimeError{op, "Operand must be a number."};
 }
 
-void Interpreter::check_number_operands(const Token& op, const Object& left,
-                                        const Object& right) {
-  if (left.is<Number>() && right.is<Number>()) {
+void Interpreter::check_number_operands(const lox::Token& op, const Value& left,
+                                        const Value& right) {
+  if (IS_NUMBER(left) && IS_NUMBER(right)) {
     return;
   }
 
-  throw RuntimeError(op, "Operands must be numbers.");
+  throw RuntimeError{op, "Operands must be numbers."};
+}
+
+Value* Interpreter::find_field(Instance& instance, std::string_view name) {
+  if (auto it = instance.fields.find(name); it != instance.fields.end()) {
+    return &it->second;
+  }
+
+  return nullptr;
+}
+
+Function* Interpreter::find_method(Class& class_, std::string_view name) {
+  if (auto it = class_.methods.find(name); it != class_.methods.end()) {
+    return &it->second;
+  }
+
+  if (class_.superclass != nullptr) {
+    return find_method(*class_.superclass, name);
+  }
+
+  return nullptr;
+}
+
+std::shared_ptr<Function> Interpreter::bind_function(
+    Function* function, const std::shared_ptr<Instance>& instance) {
+  auto closure = std::make_shared<Environment>(function->closure);
+  closure->define("this", {instance});
+  return std::make_shared<Function>(closure, function->declaration,
+                                    function->arity, function->is_initializer);
+}
+
+Value Interpreter::call_class(const std::shared_ptr<Class>& class_,
+                              std::vector<Value> arguments) {
+  auto instance = std::make_shared<Instance>(class_.get());
+
+  if (class_->initializer != nullptr) {
+    call_function(bind_function(class_->initializer, instance),
+                  std::move(arguments));
+  }
+
+  return instance;
+}
+
+Value Interpreter::call_function(const std::shared_ptr<Function>& function,
+                                 std::vector<Value> arguments) {
+  auto environment = std::make_shared<Environment>(function->closure);
+
+  for (int i = 0; i < function->declaration->params.size(); i++) {
+    environment->define(std::string{function->declaration->params[i].lexeme},
+                        arguments[i]);
+  }
+
+  // try {
+  execute_block(function->declaration->body, std::move(environment));
+  // } catch (const Return& return_value) {
+  //   return return_value.value_;
+  // }
+
+  if (function->is_initializer) {
+    return function->closure->get_at(0, {TOKEN_THIS, "this", 0});
+  }
+
+  if (!is_returning_) {
+    return {};
+  }
+
+  return return_value_;
+}
+
+Value Interpreter::call_native(const std::shared_ptr<Native>& native,
+                               std::vector<Value> arguments) {
+  return native->function(static_cast<int>(arguments.size()), arguments.data());
+}
+
+Value Interpreter::call_value(const Value& callee, std::vector<Value> arguments,
+                              const lox::Token& token) {
+  auto check_arity = [&](int arity) {
+    if (arity != arguments.size()) {
+      throw RuntimeError{token, "Expected " + std::to_string(arity) +
+                                    " arguments but got " +
+                                    std::to_string(arguments.size()) + "."};
+    }
+  };
+
+  if (IS_CLASS(callee)) {
+    check_arity(AS_CLASS(callee)->arity);
+    return call_class(AS_CLASS(callee), arguments);
+  }
+  if (IS_FUNCTION(callee)) {
+    check_arity(AS_FUNCTION(callee)->arity);
+    return call_function(AS_FUNCTION(callee), arguments);
+  }
+  if (IS_NATIVE(callee)) {
+    check_arity(AS_NATIVE(callee)->arity);
+    return call_native(AS_NATIVE(callee), arguments);
+  }
+
+  throw RuntimeError{token, "Can only call functions and classes."};
 }
 }  // namespace lox::treewalk

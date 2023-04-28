@@ -5,7 +5,7 @@
 namespace lox::treewalk {
 class AstPrinter : public expr::Visitor {
  public:
-  std::string print(const Scope<Expr>& expr);
+  std::string print(const std::unique_ptr<Expr>& expr);
 
  private:
   void visit(expr::Binary& binary) override;

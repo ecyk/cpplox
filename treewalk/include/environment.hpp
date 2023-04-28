@@ -1,29 +1,32 @@
 #pragma once
 
-#include <unordered_map>
-
-#include "object.hpp"
-#include "token.hpp"
+#include "scanner.hpp"
+#include "value.hpp"
 
 namespace lox::treewalk {
 class Environment {
+  using Values = std::unordered_map<std::string, Value, Hash, std::equal_to<>>;
+
  public:
   Environment() = default;
-  explicit Environment(const Ref<Environment>& enclosing);
+  explicit Environment(const std::shared_ptr<Environment>& enclosing);
 
-  Object& get(const Token& name);
-  Object& get_at(int distance, const Token& name);
+  const Value& get(const Token& name);
+  const Value& get_at(int distance, const Token& name);
 
-  void assign(const Token& name, const Object& value);
-  void assign_at(int distance, const Token& name, const Object& value);
-  void define(const std::string& name, const Object& value);
+  void assign(const Token& name, const Value& value);
+  void assign_at(int distance, const Token& name, const Value& value);
+  void define(std::string name, const Value& value);
 
-  [[nodiscard]] const Ref<Environment>& enclosing() const { return enclosing_; }
+  [[nodiscard]] const std::shared_ptr<Environment>& enclosing() const {
+    return enclosing_;
+  }
+  [[nodiscard]] Values& get_values() { return values_; }
 
  private:
   Environment& ancestor(int distance);
 
-  Ref<Environment> enclosing_;
-  std::unordered_map<std::string, Object> values_;
+  std::shared_ptr<Environment> enclosing_;
+  Values values_;
 };
 }  // namespace lox::treewalk

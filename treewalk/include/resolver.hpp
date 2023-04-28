@@ -6,13 +6,13 @@
 
 namespace lox::treewalk {
 class Resolver : public expr::Visitor, public stmt::Visitor {
-  using ScopeMap = std::unordered_map<std::string, bool>;
+  using ScopeMap = std::unordered_map<std::string_view, bool>;
 
  public:
-  void resolve(const std::vector<Scope<Stmt>>& statements);
+  void resolve(const std::vector<std::unique_ptr<Stmt>>& statements);
 
  private:
-  void resolve(const Scope<Stmt>& stmt);
+  void resolve(const std::unique_ptr<Stmt>& stmt);
   void visit(stmt::Block& block) override;
   void visit(stmt::Class& class_) override;
   void visit(stmt::Expression& expression) override;
@@ -23,7 +23,7 @@ class Resolver : public expr::Visitor, public stmt::Visitor {
   void visit(stmt::Var& var) override;
   void visit(stmt::While& while_) override;
 
-  void resolve(const Scope<Expr>& expr);
+  void resolve(const std::unique_ptr<Expr>& expr);
   void visit(expr::Assign& assign) override;
   void visit(expr::Binary& binary) override;
   void visit(expr::Call& call) override;
@@ -40,10 +40,10 @@ class Resolver : public expr::Visitor, public stmt::Visitor {
   void begin_scope();
   void end_scope();
 
-  void declare(const Token& name);
-  void define(const Token& name);
+  void declare(const lox::Token& name);
+  void define(const lox::Token& name);
 
-  void resolve_local(expr::Expr& expr, const Token& name);
+  void resolve_local(expr::Expr& expr, const lox::Token& name);
 
   enum class FunctionType { NONE, FUNCTION, INITIALIZER, METHOD };
   void resolve_function(const stmt::Function& function, FunctionType type);

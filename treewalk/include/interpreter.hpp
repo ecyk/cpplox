@@ -7,12 +7,12 @@ namespace lox::treewalk {
 class Interpreter : public expr::Visitor, public stmt::Visitor {
  public:
   Interpreter();
-  void interpret(const std::vector<Scope<Stmt>>& statements);
-  void execute_block(const std::vector<Scope<Stmt>>& statements,
-                     const Ref<Environment>& environment);
+  void interpret(std::vector<std::unique_ptr<Stmt>>& statements);
+  void execute_block(const std::vector<std::unique_ptr<Stmt>>& statements,
+                     std::shared_ptr<Environment> environment);
 
  private:
-  void execute(const Scope<Stmt>& stmt);
+  void execute(const std::unique_ptr<Stmt>& stmt);
   void visit(stmt::Block& block) override;
   void visit(stmt::Class& class_) override;
   void visit(stmt::Expression& expression) override;
@@ -23,7 +23,7 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
   void visit(stmt::Var& var) override;
   void visit(stmt::While& while_) override;
 
-  Object& evaluate(const Scope<Expr>& expr);
+  Value& evaluate(const std::unique_ptr<Expr>& expr);
   void visit(expr::Assign& assign) override;
   void visit(expr::Binary& binary) override;
   void visit(expr::Call& call) override;
@@ -37,16 +37,31 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
   void visit(expr::Unary& unary) override;
   void visit(expr::Variable& variable) override;
 
-  Object& look_up_variable(const Token& name, const expr::Expr& expr);
+  const Value& look_up_variable(const lox::Token& name, const expr::Expr& expr);
 
-  static void check_number_operand(const Token& op, const Object& operand);
-  static void check_number_operands(const Token& op, const Object& left,
-                                    const Object& right);
+  static void check_number_operand(const lox::Token& op, const Value& operand);
+  static void check_number_operands(const lox::Token& op, const Value& left,
+                                    const Value& right);
 
-  Object return_value_{};
+  static Value* find_field(Instance& instance, std::string_view name);
+  Function* find_method(Class& class_, std::string_view name);
+  static std::shared_ptr<Function> bind_function(
+      Function* function, const std::shared_ptr<Instance>& instance);
+  Value call_class(const std::shared_ptr<Class>& class_,
+                   std::vector<Value> arguments);
+  Value call_function(const std::shared_ptr<Function>& function,
+                      std::vector<Value> arguments);
+  static Value call_native(const std::shared_ptr<Native>& native,
+                           std::vector<Value> arguments);
+  Value call_value(const Value& callee, std::vector<Value> arguments,
+                   const lox::Token& token);
+
+  Value return_value_{};
   bool is_returning_{};
 
-  Ref<Environment> environment_;
+  std::shared_ptr<Environment> environment_;
   Environment* globals_;
+
+  std::vector<std::unique_ptr<Stmt>> statements_;
 };
 }  // namespace lox::treewalk

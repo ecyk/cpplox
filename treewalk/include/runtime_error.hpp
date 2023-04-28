@@ -3,14 +3,13 @@
 #include <stdexcept>
 #include <utility>
 
-#include "token.hpp"
+#include "scanner.hpp"
 
 namespace lox::treewalk {
-class RuntimeError : public std::runtime_error {
- public:
-  RuntimeError(Token token, const std::string& message)
-      : token_{std::move(token)}, runtime_error{message} {}
+struct RuntimeError : std::runtime_error {
+  RuntimeError(const Token& token, const std::string& message)
+      : token{token}, runtime_error{message} {}
 
-  Token token_;
+  Token token;
 };
 }  // namespace lox::treewalk

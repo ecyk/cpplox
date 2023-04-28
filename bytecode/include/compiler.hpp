@@ -53,6 +53,13 @@ class Compiler {
   inline static bool had_error{};
   inline static bool panic_mode{};
 
+  struct ClassCompiler {
+    ClassCompiler* enclosing{};
+    bool has_super_class{};
+  };
+
+  inline static ClassCompiler* current_class_compiler{};
+
  public:
   explicit Compiler(Scanner& scanner, FunctionType type = TYPE_SCRIPT,
                     Compiler* enclosing = nullptr);
@@ -100,19 +107,19 @@ class Compiler {
   void literal(bool can_assign);
   void string(bool can_assign);
   void variable(bool can_assign);
-  void named_variable(const Token& name, bool can_assign);
+  void named_variable(const lox::Token& name, bool can_assign);
   void number(bool can_assign);
 
   uint8_t parse_variable(std::string_view error_message);
   void declare_variable();
   void define_variable(uint8_t global);
-  int resolve_local(const Token& name);
-  int resolve_upvalue(const Token& name);
-  void add_local(const Token& name);
+  int resolve_local(const lox::Token& name);
+  int resolve_upvalue(const lox::Token& name);
+  void add_local(const lox::Token& name);
   int add_upvalue(uint8_t index, bool is_local);
   void mark_initialized();
   uint8_t make_constant(Value value);
-  uint8_t identifier_constant(const Token& name);
+  uint8_t identifier_constant(const lox::Token& name);
   void begin_scope() { scope_depth_++; }
   void end_scope();
 
@@ -124,7 +131,7 @@ class Compiler {
   void advance();
   void consume(TokenType type, std::string_view message);
   [[nodiscard]] static bool check(TokenType type) {
-    return current.type_ == type;
+    return current.type == type;
   }
   bool match(TokenType type);
 
@@ -132,7 +139,7 @@ class Compiler {
 
   static void error(std::string_view message);
   static void error_at_current(std::string_view message);
-  static void error_at(const Token& token, std::string_view message);
+  static void error_at(const lox::Token& token, std::string_view message);
 
   ObjFunction* function_{};
   FunctionType type_;
@@ -146,11 +153,5 @@ class Compiler {
   Scanner* scanner_;
 };
 
-struct ClassCompiler {
-  ClassCompiler* enclosing{};
-  bool has_super_class{};
-};
-
 inline Compiler* g_current_compiler{};
-inline ClassCompiler* g_current_class_compiler{};
 }  // namespace lox::bytecode

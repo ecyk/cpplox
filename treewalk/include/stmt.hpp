@@ -5,18 +5,17 @@
 #include "expr.hpp"
 
 namespace lox::treewalk::stmt {
-class Block;
-class Class;
-class Expression;
-class Function;
-class If;
-class Print;
-class Return;
-class Var;
-class While;
+struct Block;
+struct Class;
+struct Expression;
+struct Function;
+struct If;
+struct Print;
+struct Return;
+struct Var;
+struct While;
 
-class Visitor {
- public:
+struct Visitor {
   virtual ~Visitor() = default;
 
   Visitor() = default;
@@ -36,8 +35,7 @@ class Visitor {
   virtual void visit(While& while_) = 0;
 };
 
-class Stmt {
- public:
+struct Stmt {
   virtual ~Stmt() = default;
 
   Stmt() = default;
@@ -49,108 +47,99 @@ class Stmt {
   virtual void accept(Visitor& visitor) = 0;
 };
 
-class Block : public Stmt {
- public:
-  explicit Block(std::vector<Scope<Stmt>> statements)
-      : statements_{std::move(statements)} {}
+struct Block : Stmt {
+  explicit Block(std::vector<std::unique_ptr<Stmt>> statements)
+      : statements{std::move(statements)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  std::vector<Scope<Stmt>> statements_;
+  std::vector<std::unique_ptr<Stmt>> statements;
 };
 
-class Class : public Stmt {
- public:
-  explicit Class(Token name, std::optional<expr::Variable> superclass,
-                 std::vector<Function> methods)
-      : name_{std::move(name)},
-        superclass_{std::move(superclass)},
-        methods_{std::move(methods)} {}
+struct Function : Stmt {
+  Function(const lox::Token& name, std::vector<lox::Token> params,
+           std::vector<std::unique_ptr<Stmt>> body)
+      : name{name}, params{std::move(params)}, body{std::move(body)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Token name_;
-  std::optional<expr::Variable> superclass_;
-  std::vector<Function> methods_;
+  lox::Token name;
+  std::vector<lox::Token> params;
+  std::vector<std::unique_ptr<Stmt>> body;
 };
 
-class Expression : public Stmt {
- public:
-  explicit Expression(Scope<Expr> expr) : expr_{std::move(expr)} {}
+struct Class : Stmt {
+  Class(const lox::Token& name, std::optional<expr::Variable> superclass,
+        std::vector<Function> methods)
+      : name{name},
+        superclass{std::move(superclass)},
+        methods{std::move(methods)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Scope<Expr> expr_;
+  lox::Token name;
+  std::optional<expr::Variable> superclass;
+  std::vector<Function> methods;
 };
 
-class Function : public Stmt {
- public:
-  Function(Token name, std::vector<Token> params, std::vector<Scope<Stmt>> body)
-      : name_{std::move(name)},
-        params_{std::move(params)},
-        body_{std::move(body)} {}
+struct Expression : Stmt {
+  explicit Expression(std::unique_ptr<Expr> expr) : expr{std::move(expr)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Token name_;
-  std::vector<Token> params_;
-  std::vector<Scope<Stmt>> body_;
+  std::unique_ptr<Expr> expr;
 };
 
-class If : public Stmt {
- public:
-  If(Scope<Expr> condition, Scope<Stmt> then_branch, Scope<Stmt> else_branch)
-      : condition_{std::move(condition)},
-        then_branch_{std::move(then_branch)},
-        else_branch_{std::move(else_branch)} {}
+struct If : Stmt {
+  If(std::unique_ptr<Expr> condition, std::unique_ptr<Stmt> then_branch,
+     std::unique_ptr<Stmt> else_branch)
+      : condition{std::move(condition)},
+        then_branch{std::move(then_branch)},
+        else_branch{std::move(else_branch)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Scope<Expr> condition_;
-  Scope<Stmt> then_branch_;
-  Scope<Stmt> else_branch_;
+  std::unique_ptr<Expr> condition;
+  std::unique_ptr<Stmt> then_branch;
+  std::unique_ptr<Stmt> else_branch;
 };
 
-class Print : public Stmt {
- public:
-  explicit Print(Scope<Expr> expr) : expr_{std::move(expr)} {}
+struct Print : Stmt {
+  explicit Print(std::unique_ptr<Expr> expr) : expr{std::move(expr)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Scope<Expr> expr_;
+  std::unique_ptr<Expr> expr;
 };
 
-class Return : public Stmt {
- public:
-  explicit Return(Token keyword, Scope<Expr> value)
-      : keyword_{std::move(keyword)}, value_{std::move(value)} {}
+struct Return : Stmt {
+  explicit Return(const lox::Token& keyword, std::unique_ptr<Expr> value)
+      : keyword{keyword}, value{std::move(value)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Token keyword_;
-  Scope<Expr> value_;
+  lox::Token keyword;
+  std::unique_ptr<Expr> value;
 };
 
-class Var : public Stmt {
- public:
-  Var(Token name, Scope<Expr> initializer)
-      : name_{std::move(name)}, initializer_{std::move(initializer)} {}
+struct Var : Stmt {
+  Var(const lox::Token& name, std::unique_ptr<Expr> initializer)
+      : name{name}, initializer{std::move(initializer)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Token name_;
-  Scope<Expr> initializer_;
+  lox::Token name;
+  std::unique_ptr<Expr> initializer;
 };
 
-class While : public Stmt {
- public:
-  While(Scope<Expr> condition, Scope<Stmt> body)
-      : condition_{std::move(condition)}, body_{std::move(body)} {}
+struct While : Stmt {
+  While(std::unique_ptr<Expr> condition, std::unique_ptr<Stmt> body)
+      : condition{std::move(condition)}, body{std::move(body)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Scope<Expr> condition_;
-  Scope<Stmt> body_;
+  std::unique_ptr<Expr> condition;
+  std::unique_ptr<Stmt> body;
 };
 }  // namespace lox::treewalk::stmt
 

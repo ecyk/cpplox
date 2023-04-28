@@ -58,13 +58,13 @@ Compiler::Compiler(Scanner& scanner, FunctionType type, Compiler* enclosing)
 
   function_ = g_vm.allocate_object<ObjFunction>();
   if (type_ != TYPE_SCRIPT) {
-    function_->name = g_vm.allocate_object<ObjString>(previous.lexeme_);
+    function_->name = g_vm.allocate_object<ObjString>(previous.lexeme);
   }
 
   if (type != TYPE_FUNCTION) {
-    locals_[0].name.lexeme_ = "this";
+    locals_[0].name.lexeme = "this";
   } else {
-    locals_[0].name.lexeme_ = "";
+    locals_[0].name.lexeme = "";
   }
 
   local_count_++;
@@ -107,7 +107,7 @@ void Compiler::mark_compiler_roots() {
 }
 
 void Compiler::emit_byte(uint8_t byte) {
-  current_chunk()->write(byte, previous.line_);
+  current_chunk()->write(byte, previous.line);
 }
 
 void Compiler::emit_bytes(uint8_t byte1, uint8_t byte2) {
@@ -137,7 +137,9 @@ int Compiler::emit_jump(uint8_t instruction) {
 }
 
 void Compiler::patch_jump(int offset) {
-  const unsigned int jump = current_chunk()->get_codes().size() - offset - 2;
+  const unsigned int jump =
+      static_cast<unsigned int>(current_chunk()->get_codes().size()) - offset -
+      2;
 
   if (jump > UINT16_MAX) {
     error("Too much code to jump over.");
@@ -151,7 +153,8 @@ void Compiler::emit_loop(int loop_start) {
   emit_byte(OP_LOOP);
 
   const unsigned int offset =
-      current_chunk()->get_codes().size() - loop_start + 2;
+      static_cast<unsigned int>(current_chunk()->get_codes().size()) -
+      loop_start + 2;
   if (offset > UINT16_MAX) {
     error("Loop body too large.");
   }
@@ -186,13 +189,13 @@ void Compiler::class_declaration() {
   define_variable(name_constant);
 
   ClassCompiler class_compiler;
-  class_compiler.enclosing = g_current_class_compiler;
-  g_current_class_compiler = &class_compiler;
+  class_compiler.enclosing = current_class_compiler;
+  current_class_compiler = &class_compiler;
 
   if (match(TOKEN_LESS)) {
     consume(TOKEN_IDENTIFIER, "Expect superclass name.");
     variable(false);
-    if (class_name.lexeme_ == previous.lexeme_) {
+    if (class_name.lexeme == previous.lexeme) {
       error("A class can't inherit from itself.");
     }
     begin_scope();
@@ -215,14 +218,14 @@ void Compiler::class_declaration() {
     end_scope();
   }
 
-  g_current_class_compiler = g_current_class_compiler->enclosing;
+  current_class_compiler = current_class_compiler->enclosing;
 }
 
 void Compiler::method() {
   consume(TOKEN_IDENTIFIER, "Expect method name.");
   const uint8_t constant = identifier_constant(previous);
   FunctionType type = TYPE_METHOD;
-  if (previous.lexeme_ == "init") {
+  if (previous.lexeme == "init") {
     type = TYPE_INITIALIZER;
   }
   function(type);
@@ -445,9 +448,9 @@ uint8_t Compiler::argument_list() {
 }
 
 void Compiler::super_(bool /*can_assign*/) {
-  if (g_current_class_compiler == nullptr) {
+  if (current_class_compiler == nullptr) {
     error("Can't use 'super' outside of a class.");
-  } else if (!g_current_class_compiler->has_super_class) {
+  } else if (!current_class_compiler->has_super_class) {
     error("Can't use 'super' in a class with no superclass.");
   }
 
@@ -468,7 +471,7 @@ void Compiler::super_(bool /*can_assign*/) {
 }
 
 void Compiler::this_(bool /*can_assign*/) {
-  if (g_current_class_compiler == nullptr) {
+  if (current_class_compiler == nullptr) {
     error("Can't use 'this' outside of a class.");
     return;
   }
@@ -513,7 +516,7 @@ void Compiler::or_(bool /*can_assign*/) {
 }
 
 void Compiler::binary(bool /*can_assign*/) {
-  const TokenType op = previous.type_;
+  const TokenType op = previous.type;
   parse_precedence(static_cast<Precedence>(get_rule(op)->precedence + 1));
 
   switch (op) {
@@ -553,7 +556,7 @@ void Compiler::binary(bool /*can_assign*/) {
 }
 
 void Compiler::unary(bool /*can_assign*/) {
-  const TokenType op = previous.type_;
+  const TokenType op = previous.type;
   parse_precedence(PREC_UNARY);
 
   switch (op) {
@@ -574,7 +577,7 @@ void Compiler::grouping(bool /*can_assign*/) {
 }
 
 void Compiler::literal(bool /*can_assign*/) {
-  switch (previous.type_) {
+  switch (previous.type) {
     case TOKEN_FALSE:
       emit_byte(OP_FALSE);
       break;
@@ -590,16 +593,16 @@ void Compiler::literal(bool /*can_assign*/) {
 }
 
 void Compiler::string(bool /*can_assign*/) {
-  previous.lexeme_.remove_prefix(1);
-  previous.lexeme_.remove_suffix(1);
-  emit_constant(OBJ_VAL(g_vm.allocate_object<ObjString>(previous.lexeme_)));
+  previous.lexeme.remove_prefix(1);
+  previous.lexeme.remove_suffix(1);
+  emit_constant(OBJ_VAL(g_vm.allocate_object<ObjString>(previous.lexeme)));
 }
 
 void Compiler::variable(bool can_assign) {
   named_variable(previous, can_assign);
 }
 
-void Compiler::named_variable(const Token& name, bool can_assign) {
+void Compiler::named_variable(const lox::Token& name, bool can_assign) {
   uint8_t get_op = OP_GET_GLOBAL;
   uint8_t set_op = OP_SET_GLOBAL;
 
@@ -623,7 +626,7 @@ void Compiler::named_variable(const Token& name, bool can_assign) {
 }
 
 void Compiler::number(bool /*can_assign*/) {
-  const double value = strtod(previous.lexeme_.data(), nullptr);
+  const double value = strtod(previous.lexeme.data(), nullptr);
   emit_constant(NUMBER_VAL(value));
 }
 
@@ -649,7 +652,7 @@ void Compiler::declare_variable() {
       break;
     }
 
-    if (previous.lexeme_ == local.name.lexeme_) {
+    if (previous.lexeme == local.name.lexeme) {
       error("Already a variable with this name in this scope.");
     }
   }
@@ -666,10 +669,10 @@ void Compiler::define_variable(uint8_t global) {
   emit_bytes(OP_DEFINE_GLOBAL, global);
 }
 
-int Compiler::resolve_local(const Token& name) {
+int Compiler::resolve_local(const lox::Token& name) {
   for (int i = local_count_ - 1; i >= 0; i--) {
     const Local& local = locals_[i];
-    if (name.lexeme_ == local.name.lexeme_) {
+    if (name.lexeme == local.name.lexeme) {
       if (local.depth == -1) {
         error("Can't read local variable in its own initializer.");
       }
@@ -680,7 +683,7 @@ int Compiler::resolve_local(const Token& name) {
   return -1;
 }
 
-int Compiler::resolve_upvalue(const Token& name) {
+int Compiler::resolve_upvalue(const lox::Token& name) {
   if (enclosing_ == nullptr) {
     return -1;
   }
@@ -699,7 +702,7 @@ int Compiler::resolve_upvalue(const Token& name) {
   return -1;
 }
 
-void Compiler::add_local(const Token& name) {
+void Compiler::add_local(const lox::Token& name) {
   if (local_count_ == UINT8_COUNT) {
     error("Too many local variables in function.");
     return;
@@ -748,8 +751,8 @@ uint8_t Compiler::make_constant(Value value) {
   return static_cast<uint8_t>(index);
 }
 
-uint8_t Compiler::identifier_constant(const Token& name) {
-  return make_constant(OBJ_VAL(g_vm.allocate_object<ObjString>(name.lexeme_)));
+uint8_t Compiler::identifier_constant(const lox::Token& name) {
+  return make_constant(OBJ_VAL(g_vm.allocate_object<ObjString>(name.lexeme)));
 }
 
 void Compiler::end_scope() {
@@ -766,7 +769,7 @@ void Compiler::end_scope() {
 
 void Compiler::parse_precedence(Precedence precedence) {
   advance();
-  const ParseFn prefix_rule = get_rule(previous.type_)->prefix;
+  const ParseFn prefix_rule = get_rule(previous.type)->prefix;
   if (prefix_rule == nullptr) {
     error("Expect expression.");
     return;
@@ -775,9 +778,9 @@ void Compiler::parse_precedence(Precedence precedence) {
   const bool can_assign = precedence <= PREC_ASSIGNMENT;
   (this->*prefix_rule)(can_assign);
 
-  while (precedence <= get_rule(current.type_)->precedence) {
+  while (precedence <= get_rule(current.type)->precedence) {
     advance();
-    const ParseFn infix_rule = get_rule(previous.type_)->infix;
+    const ParseFn infix_rule = get_rule(previous.type)->infix;
     (this->*infix_rule)(can_assign);
   }
 
@@ -791,11 +794,11 @@ void Compiler::advance() {
 
   for (;;) {
     current = scanner_->scan_token();
-    if (current.type_ != TOKEN_ERROR) {
+    if (current.type != TOKEN_ERROR) {
       break;
     }
 
-    error_at_current(current.lexeme_);
+    error_at_current(current.lexeme);
   }
 }
 
@@ -820,11 +823,11 @@ bool Compiler::match(TokenType type) {
 void Compiler::synchronize() {
   panic_mode = false;
 
-  while (current.type_ != TOKEN_EOF) {
-    if (previous.type_ == TOKEN_SEMICOLON) {
+  while (current.type != TOKEN_EOF) {
+    if (previous.type == TOKEN_SEMICOLON) {
       return;
     }
-    switch (current.type_) {
+    switch (current.type) {
       case TOKEN_CLASS:
       case TOKEN_FUN:
       case TOKEN_VAR:
@@ -848,19 +851,19 @@ void Compiler::error_at_current(std::string_view message) {
   error_at(current, message);
 }
 
-void Compiler::error_at(const Token& token, std::string_view message) {
+void Compiler::error_at(const lox::Token& token, std::string_view message) {
   if (panic_mode) {
     return;
   }
   panic_mode = true;
-  std::cerr << "[line " << token.line_ << "] Error";
+  std::cerr << "[line " << token.line << "] Error";
 
-  if (token.type_ == TOKEN_EOF) {
+  if (token.type == TOKEN_EOF) {
     std::cerr << " at end";
-  } else if (token.type_ == TOKEN_ERROR) {
+  } else if (token.type == TOKEN_ERROR) {
     // Nothing.
   } else {
-    std::cerr << " at '" << token.lexeme_ << "'";
+    std::cerr << " at '" << token.lexeme << "'";
   }
 
   std::cerr << ": " << message << '\n';

@@ -3,7 +3,7 @@
 #include <cctype>
 #include <cstring>
 
-namespace lox::bytecode {
+namespace lox {
 Token Scanner::scan_token() {
   for (;;) {
     switch (const char c = peek()) {
@@ -101,6 +101,20 @@ Token Scanner::scan_token() {
   }
 
   return error_token("Unexpected character.");
+}
+
+std::vector<Token> Scanner::scan_tokens() {
+  std::vector<Token> tokens;
+
+  for (;;) {
+    const Token token = scan_token();
+    tokens.push_back(token);
+    if (token.type == TOKEN_EOF) {
+      break;
+    }
+  }
+
+  return tokens;
 }
 
 Token Scanner::identifier() {
@@ -221,4 +235,4 @@ bool Scanner::match(char expected) {
   current_++;
   return true;
 }
-}  // namespace lox::bytecode
+}  // namespace lox

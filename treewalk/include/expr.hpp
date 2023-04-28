@@ -1,24 +1,23 @@
 #pragma once
 
-#include "object.hpp"
-#include "token.hpp"
+#include "scanner.hpp"
+#include "value.hpp"
 
 namespace lox::treewalk::expr {
-class Assign;
-class Binary;
-class Call;
-class Get;
-class Grouping;
-class Literal;
-class Logical;
-class Set;
-class This;
-class Super;
-class Unary;
-class Variable;
+struct Assign;
+struct Binary;
+struct Call;
+struct Get;
+struct Grouping;
+struct Literal;
+struct Logical;
+struct Set;
+struct This;
+struct Super;
+struct Unary;
+struct Variable;
 
-class Visitor {
- public:
+struct Visitor {
   virtual ~Visitor() = default;
 
   Visitor() = default;
@@ -41,8 +40,7 @@ class Visitor {
   virtual void visit(Variable& variable) = 0;
 };
 
-class Expr {
- public:
+struct Expr {
   virtual ~Expr() = default;
 
   Expr() = default;
@@ -53,139 +51,129 @@ class Expr {
 
   virtual void accept(Visitor& visitor) = 0;
 
-  int depth_{-1};
+  int depth{-1};
 };
 
-class Assign : public Expr {
- public:
-  Assign(Token name, Scope<Expr> value)
-      : name_{std::move(name)}, value_{std::move(value)} {}
+struct Assign : Expr {
+  Assign(const lox::Token& name, std::unique_ptr<Expr> value)
+      : name{name}, value{std::move(value)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Token name_;
-  Scope<Expr> value_;
+  lox::Token name;
+  std::unique_ptr<Expr> value;
 };
 
-class Binary : public Expr {
- public:
-  Binary(Scope<Expr> left, Token op, Scope<Expr> right)
-      : left_{std::move(left)}, op_{std::move(op)}, right_{std::move(right)} {}
+struct Binary : Expr {
+  Binary(std::unique_ptr<Expr> left, const lox::Token& op,
+         std::unique_ptr<Expr> right)
+      : left{std::move(left)}, op{op}, right{std::move(right)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Scope<Expr> left_;
-  Token op_;
-  Scope<Expr> right_;
+  std::unique_ptr<Expr> left;
+  lox::Token op;
+  std::unique_ptr<Expr> right;
 };
 
-class Call : public Expr {
- public:
-  Call(Scope<Expr> callee, Token paren, std::vector<Scope<Expr>> arguments)
-      : callee_{std::move(callee)},
-        paren_{std::move(paren)},
-        arguments_{std::move(arguments)} {}
+struct Call : Expr {
+  Call(std::unique_ptr<Expr> callee, const lox::Token& paren,
+       std::vector<std::unique_ptr<Expr>> arguments)
+      : callee{std::move(callee)},
+        paren{paren},
+        arguments{std::move(arguments)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Scope<Expr> callee_;
-  Token paren_;
-  std::vector<Scope<Expr>> arguments_;
+  std::unique_ptr<Expr> callee;
+  lox::Token paren;
+  std::vector<std::unique_ptr<Expr>> arguments;
 };
 
-class Get : public Expr {
- public:
-  Get(Scope<Expr> object, Token name)
-      : object_{std::move(object)}, name_{std::move(name)} {}
+struct Get : Expr {
+  Get(std::unique_ptr<Expr> object, const lox::Token& name)
+      : object{std::move(object)}, name{name} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Scope<Expr> object_;
-  Token name_;
+  std::unique_ptr<Expr> object;
+  lox::Token name;
 };
 
-class Grouping : public Expr {
- public:
-  explicit Grouping(Scope<Expr> expr) : expr_{std::move(expr)} {}
+struct Grouping : Expr {
+  explicit Grouping(std::unique_ptr<Expr> expr) : expr{std::move(expr)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Scope<Expr> expr_;
+  std::unique_ptr<Expr> expr;
 };
 
-class Literal : public Expr {
- public:
-  explicit Literal(Object value) : value_{std::move(value)} {}
+struct Literal : Expr {
+  explicit Literal(Value value) : value{std::move(value)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Object value_;
+  Value value;
 };
 
-class Logical : public Expr {
- public:
-  Logical(Scope<Expr> left, Token op, Scope<Expr> right)
-      : left_{std::move(left)}, op_{std::move(op)}, right_{std::move(right)} {}
+struct Logical : Expr {
+  Logical(std::unique_ptr<Expr> left, const lox::Token& op,
+          std::unique_ptr<Expr> right)
+      : left{std::move(left)}, op{op}, right{std::move(right)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Scope<Expr> left_;
-  Token op_;
-  Scope<Expr> right_;
+  std::unique_ptr<Expr> left;
+  lox::Token op;
+  std::unique_ptr<Expr> right;
 };
 
-class Set : public Expr {
- public:
-  Set(Scope<Expr> object, Token name, Scope<Expr> value)
-      : object_{std::move(object)},
-        name_{std::move(name)},
-        value_{std::move(value)} {}
+struct Set : Expr {
+  Set(std::unique_ptr<Expr> object, const lox::Token& name,
+      std::unique_ptr<Expr> value)
+      : object{std::move(object)}, name{name}, value{std::move(value)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Scope<Expr> object_;
-  Token name_;
-  Scope<Expr> value_;
+  std::unique_ptr<Expr> object;
+  lox::Token name;
+  std::unique_ptr<Expr> value;
 };
 
-class This : public Expr {
- public:
-  explicit This(Token keyword) : keyword_{std::move(keyword)} {}
+struct This : Expr {
+  explicit This(const lox::Token& keyword) : keyword{keyword} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Token keyword_;
+  lox::Token keyword;
 };
 
-class Super : public Expr {
- public:
-  Super(Token keyword, Token method)
-      : keyword_{std::move(keyword)}, method_{std::move(method)} {}
+struct Super : Expr {
+  Super(const lox::Token& keyword, const lox::Token& method)
+      : keyword{keyword}, method{method} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Token keyword_;
-  Token method_;
+  lox::Token keyword;
+  lox::Token method;
 };
 
-class Unary : public Expr {
- public:
-  Unary(Token op, Scope<Expr> right)
-      : op_{std::move(op)}, right_{std::move(right)} {}
+struct Unary : Expr {
+  Unary(const lox::Token& op, std::unique_ptr<Expr> right)
+      : op{op}, right{std::move(right)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Token op_;
-  Scope<Expr> right_;
+  lox::Token op;
+  std::unique_ptr<Expr> right;
 };
 
-class Variable : public Expr {
- public:
-  explicit Variable(Token name) : name_{std::move(name)} {}
+struct Variable : Expr {
+  explicit Variable(const lox::Token& name) : name{name} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
-  Token name_;
+  lox::Token name;
 };
 }  // namespace lox::treewalk::expr
 

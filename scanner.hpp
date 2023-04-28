@@ -1,8 +1,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
-namespace lox::bytecode {
+namespace lox {
 enum TokenType {
   // Single-character tokens.
 
@@ -59,15 +60,14 @@ enum TokenType {
   TOKEN_COUNT
 };
 
-class Token {
- public:
+struct Token {
   Token() = default;
   Token(TokenType type, std::string_view lexeme, int line)
-      : type_{type}, lexeme_{lexeme}, line_{line} {}
+      : type{type}, lexeme{lexeme}, line{line} {}
 
-  TokenType type_{TOKEN_ERROR};
-  std::string_view lexeme_{};
-  int line_{};
+  TokenType type{TOKEN_ERROR};
+  std::string_view lexeme{};
+  int line{};
 };
 
 class Scanner {
@@ -76,6 +76,7 @@ class Scanner {
       : start_{source.c_str()}, current_{source.c_str()} {}
 
   Token scan_token();
+  std::vector<Token> scan_tokens();
 
  private:
   [[nodiscard]] Token make_token(TokenType type) const {
@@ -101,4 +102,4 @@ class Scanner {
   const char *start_{}, *current_{};
   int line_{1};
 };
-}  // namespace lox::bytecode
+}  // namespace lox

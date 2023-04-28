@@ -488,6 +488,39 @@ void VM::runtime_error(const std::string& message) {
   reset_stack();
 }
 
+void VM::collect_garbage() {
+#ifdef DEBUG_LOG_GC
+  std::cout << "-- gc begin\n";
+  const size_t before = bytes_allocated_;
+#endif
+
+  mark_roots();
+  trace_references();
+  strings_.remove_white();
+  sweep();
+
+  next_gc_ = bytes_allocated_ * GC_HEAP_GROW_FACTOR;
+
+#ifdef DEBUG_LOG_GC
+  std::cout << "-- gc end\n";
+  std::cout << "   collected " << before - bytes_allocated_ << " bytes (from "
+            << before << " to " << bytes_allocated_ << ") next at " << next_gc_
+            << '\n';
+#endif
+}
+
+void VM::free_objects() {
+  Obj* object = objects_;
+  while (object != nullptr) {
+    Obj* next = object->next_object;
+#ifdef DEBUG_LOG_GC
+    std::cout << (void*)object << " free type " << object->type << '\n';
+#endif
+    delete object;
+    object = next;
+  }
+}
+
 void VM::mark_object(Obj* object) {
   if (object == nullptr) {
     return;
@@ -568,39 +601,6 @@ void VM::blacken_object(Obj* object) {
       break;
     default:
       break;
-  }
-}
-
-void VM::collect_garbage() {
-#ifdef DEBUG_LOG_GC
-  std::cout << "-- gc begin\n";
-  const size_t before = bytes_allocated_;
-#endif
-
-  mark_roots();
-  trace_references();
-  strings_.remove_white();
-  sweep();
-
-  next_gc_ = bytes_allocated_ * GC_HEAP_GROW_FACTOR;
-
-#ifdef DEBUG_LOG_GC
-  std::cout << "-- gc end\n";
-  std::cout << "   collected " << before - bytes_allocated_ << " bytes (from "
-            << before << " to " << bytes_allocated_ << ") next at " << next_gc_
-            << '\n';
-#endif
-}
-
-void VM::free_objects() {
-  Obj* object = objects_;
-  while (object != nullptr) {
-    Obj* next = object->next_object;
-#ifdef DEBUG_LOG_GC
-    std::cout << (void*)object << " free type " << object->type << '\n';
-#endif
-    delete object;
-    object = next;
   }
 }
 
