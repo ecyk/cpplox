@@ -1,15 +1,21 @@
 #pragma once
 
+#include <list>
+
 #include "environment.hpp"
 #include "stmt.hpp"
 
 namespace lox::treewalk {
 class Interpreter : public expr::Visitor, public stmt::Visitor {
+  static constexpr size_t COLLECT_ENVIRONMENTS_THRESHOLD = 25;
+
  public:
   Interpreter();
   void interpret(std::vector<std::unique_ptr<Stmt>>& statements);
   void execute_block(const std::vector<std::unique_ptr<Stmt>>& statements,
-                     std::shared_ptr<Environment> environment);
+                     Environment* environment);
+
+  void free_environments();
 
  private:
   void execute(const std::unique_ptr<Stmt>& stmt);
@@ -45,7 +51,7 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
 
   static Value* find_field(Instance& instance, std::string_view name);
   Function* find_method(Class& class_, std::string_view name);
-  static std::shared_ptr<Function> bind_function(
+  std::shared_ptr<Function> bind_function(
       Function* function, const std::shared_ptr<Instance>& instance);
   Value call_class(const std::shared_ptr<Class>& class_,
                    std::vector<Value> arguments);
@@ -56,12 +62,25 @@ class Interpreter : public expr::Visitor, public stmt::Visitor {
   Value call_value(const Value& callee, std::vector<Value> arguments,
                    const lox::Token& token);
 
+  static void mark_function_closure(const std::shared_ptr<Function>& function);
+  static void mark_class_closure(const std::shared_ptr<Class>& class_);
+  static void mark_environment(Environment* environment);
+
+  Environment* make_environment(Environment* enclosing = nullptr);
+  void collect_environments(Environment* enclosing);
+
   Value return_value_{};
   bool is_returning_{};
 
-  std::shared_ptr<Environment> environment_;
+  std::vector<Environment*> call_stack_;
+  std::list<Environment*> environments_;
+  Environment* environment_;
   Environment* globals_;
+
+  size_t environments_created_{};
 
   std::vector<std::unique_ptr<Stmt>> statements_;
 };
+
+inline Interpreter g_interpreter;
 }  // namespace lox::treewalk

@@ -3,8 +3,7 @@
 #include "runtime_error.hpp"
 
 namespace lox::treewalk {
-Environment::Environment(const std::shared_ptr<Environment>& enclosing)
-    : enclosing_{enclosing} {}
+Environment::Environment(Environment* enclosing) : enclosing_{enclosing} {}
 
 const Value& Environment::get(const Token& name) {
   if (auto it = values_.find(name.lexeme); it != values_.end()) {
@@ -42,14 +41,14 @@ void Environment::assign_at(int distance, const Token& name,
   ancestor(distance).assign(name, value);
 }
 
-void Environment::define(std::string name, const Value& value) {
-  values_.insert_or_assign(std::move(name), value);
+void Environment::define(const std::string& name, const Value& value) {
+  values_.insert_or_assign(name, value);
 }
 
 Environment& Environment::ancestor(int distance) {
   Environment* environment = this;
   for (int i = 0; i < distance; i++) {
-    environment = environment->enclosing_.get();
+    environment = environment->enclosing_;
   }
 
   return *environment;

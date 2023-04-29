@@ -38,8 +38,7 @@ static void run(const std::string& source) {
     return;
   }
 
-  static Interpreter interpreter;
-  interpreter.interpret(statements);
+  g_interpreter.interpret(statements);
 }
 
 int run_file(const std::string& path) {
@@ -49,6 +48,7 @@ int run_file(const std::string& path) {
                            std::istreambuf_iterator<char>{}};
 
   run(source);
+  g_interpreter.free_environments();
 
   if (g_had_error) {
     return 65;
@@ -73,6 +73,7 @@ void run_prompt() {
     run(source_line);
     g_had_error = false;
   }
+  g_interpreter.free_environments();
 }
 
 void runtime_error(const RuntimeError& error) {

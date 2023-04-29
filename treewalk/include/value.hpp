@@ -44,14 +44,14 @@ class Environment;
 class Interpreter;
 
 struct Function {
-  Function(const std::shared_ptr<Environment>& closure,
-           stmt::Function* declaration, int arity, bool is_initializer)
+  Function(Environment* closure, stmt::Function* declaration, int arity,
+           bool is_initializer)
       : closure{closure},
         declaration{declaration},
         arity{arity},
         is_initializer{is_initializer} {}
 
-  std::shared_ptr<Environment> closure;
+  Environment* closure;
   stmt::Function* declaration;
   int arity;
   bool is_initializer;
@@ -70,18 +70,15 @@ using Methods =
     std::unordered_map<std::string, Function, Hash, std::equal_to<>>;
 
 struct Class {
-  Class(Methods methods, stmt::Class* declaration, Class* superclass,
-        Function* initializer, int arity)
+  Class(Methods methods, stmt::Class* declaration, Class* superclass, int arity)
       : methods{std::move(methods)},
         declaration{declaration},
         superclass{superclass},
-        initializer{initializer},
         arity{arity} {}
 
   Methods methods;
   stmt::Class* declaration;
   Class* superclass;
-  Function* initializer;
   int arity;
 };
 

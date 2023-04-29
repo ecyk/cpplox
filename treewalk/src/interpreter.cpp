@@ -16,8 +16,7 @@ static Value clock_native(int /*arg_count*/, Value* /*args*/) {
 }
 
 Interpreter::Interpreter()
-    : environment_{std::make_shared<Environment>()},
-      globals_{environment_.get()} {
+    : environment_{make_environment()}, globals_{environment_} {
   environment_->define("clock", std::make_shared<Native>(clock_native, 0));
 }
 
@@ -37,16 +36,17 @@ void Interpreter::interpret(std::vector<std::unique_ptr<Stmt>>& statements) {
 
 void Interpreter::execute_block(
     const std::vector<std::unique_ptr<Stmt>>& statements,
-    std::shared_ptr<Environment> environment) {
+    Environment* environment) {
   if (statements.empty()) {
     return_value_ = {};
     return;
   }
 
-  auto previous = std::move(environment_);
+  Environment* previous = environment_;
+  call_stack_.push_back(previous);
 
   // try {
-  environment_ = std::move(environment);
+  environment_ = environment;
 
   for (const auto& statement : statements) {
     execute(statement);
@@ -56,7 +56,16 @@ void Interpreter::execute_block(
   //   throw;
   // }
 
-  environment_ = std::move(previous);
+  environment_ = call_stack_.back();
+  call_stack_.pop_back();
+}
+
+void Interpreter::free_environments() {
+  for (auto it = environments_.begin(); it != environments_.end();) {
+    Environment* environment = *it;
+    environments_.erase(it++);
+    delete environment;
+  }
 }
 
 void Interpreter::execute(const std::unique_ptr<Stmt>& stmt) {
@@ -68,7 +77,7 @@ void Interpreter::execute(const std::unique_ptr<Stmt>& stmt) {
 }
 
 void Interpreter::visit(stmt::Block& block) {
-  execute_block(block.statements, std::make_shared<Environment>(environment_));
+  execute_block(block.statements, make_environment(environment_));
 }
 
 void Interpreter::visit(stmt::Class& class_) {
@@ -84,7 +93,7 @@ void Interpreter::visit(stmt::Class& class_) {
   environment_->define(std::string{class_.name.lexeme}, {});
 
   if (!IS_NIL(superclass)) {
-    environment_ = std::make_shared<Environment>(environment_);
+    environment_ = make_environment(environment_);
     environment_->define("super", superclass);
   }
 
@@ -97,17 +106,15 @@ void Interpreter::visit(stmt::Class& class_) {
   }
 
   if (!IS_NIL(superclass)) {
-    environment_ = environment_->enclosing();
+    environment_ = environment_->get_enclosing();
   }
 
   auto class_object = std::make_shared<Class>(
       std::move(methods), &class_,
-      IS_CLASS(superclass) ? AS_CLASS(superclass).get() : nullptr, nullptr, 0);
+      IS_CLASS(superclass) ? AS_CLASS(superclass).get() : nullptr, 0);
 
-  class_object->initializer = find_method(*class_object, "init");
-  if (class_object->initializer != nullptr) {
-    class_object->arity =
-        static_cast<int>(class_object->initializer->declaration->params.size());
+  if (Function* initializer = find_method(*class_object, "init")) {
+    class_object->arity = initializer->arity;
   }
 
   environment_->assign(class_.name, class_object);
@@ -399,7 +406,7 @@ Function* Interpreter::find_method(Class& class_, std::string_view name) {
 
 std::shared_ptr<Function> Interpreter::bind_function(
     Function* function, const std::shared_ptr<Instance>& instance) {
-  auto closure = std::make_shared<Environment>(function->closure);
+  auto* closure = make_environment(function->closure);
   closure->define("this", {instance});
   return std::make_shared<Function>(closure, function->declaration,
                                     function->arity, function->is_initializer);
@@ -409,9 +416,8 @@ Value Interpreter::call_class(const std::shared_ptr<Class>& class_,
                               std::vector<Value> arguments) {
   auto instance = std::make_shared<Instance>(class_.get());
 
-  if (class_->initializer != nullptr) {
-    call_function(bind_function(class_->initializer, instance),
-                  std::move(arguments));
+  if (Function* initializer = find_method(*class_, "init")) {
+    call_function(bind_function(initializer, instance), std::move(arguments));
   }
 
   return instance;
@@ -419,7 +425,7 @@ Value Interpreter::call_class(const std::shared_ptr<Class>& class_,
 
 Value Interpreter::call_function(const std::shared_ptr<Function>& function,
                                  std::vector<Value> arguments) {
-  auto environment = std::make_shared<Environment>(function->closure);
+  auto* environment = make_environment(function->closure);
 
   for (int i = 0; i < function->declaration->params.size(); i++) {
     environment->define(std::string{function->declaration->params[i].lexeme},
@@ -427,7 +433,7 @@ Value Interpreter::call_function(const std::shared_ptr<Function>& function,
   }
 
   // try {
-  execute_block(function->declaration->body, std::move(environment));
+  execute_block(function->declaration->body, environment);
   // } catch (const Return& return_value) {
   //   return return_value.value_;
   // }
@@ -472,5 +478,74 @@ Value Interpreter::call_value(const Value& callee, std::vector<Value> arguments,
   }
 
   throw RuntimeError{token, "Can only call functions and classes."};
+}
+
+void Interpreter::mark_function_closure(
+    const std::shared_ptr<Function>& function) {
+  mark_environment(function->closure);
+}
+
+void Interpreter::mark_class_closure(const std::shared_ptr<Class>& class_) {
+  if (!class_->methods.empty()) {
+    mark_environment(class_->methods.begin()->second.closure);
+  }
+}
+
+void Interpreter::mark_environment(Environment* environment) {
+  if (environment == nullptr) {
+    return;
+  }
+  if (environment->is_marked_) {
+    return;
+  }
+
+  environment->is_marked_ = true;
+
+  for (const auto& [_, value] : environment->get_values()) {
+    if (IS_FUNCTION(value)) {
+      mark_function_closure(AS_FUNCTION(value));
+    } else if (IS_CLASS(value)) {
+      mark_class_closure(AS_CLASS(value));
+    }
+  }
+
+  mark_environment(environment->get_enclosing());
+}
+
+Environment* Interpreter::make_environment(Environment* enclosing) {
+  if (environments_created_++ > COLLECT_ENVIRONMENTS_THRESHOLD) {
+    collect_environments(enclosing);
+  }
+
+  auto* environment = new Environment{enclosing};
+  environments_.push_back(environment);
+  return environment;
+}
+
+void Interpreter::collect_environments(Environment* enclosing) {
+  mark_environment(globals_);
+  mark_environment(environment_);
+  mark_environment(enclosing);
+
+  if (IS_FUNCTION(return_value_)) {
+    mark_function_closure(AS_FUNCTION(return_value_));
+  } else if (IS_CLASS(return_value_)) {
+    mark_class_closure(AS_CLASS(return_value_));
+  }
+
+  for (Environment* environment : call_stack_) {
+    mark_environment(environment);
+  }
+
+  for (auto it = environments_.begin(); it != environments_.end();) {
+    if ((*it)->is_marked_) {
+      (*it)->is_marked_ = false;
+      it++;
+    } else {
+      Environment* unreached = *it;
+      environments_.erase(it++);
+      delete unreached;
+    }
+  }
 }
 }  // namespace lox::treewalk
