@@ -6,7 +6,8 @@
 #include "object.hpp"
 
 namespace lox::bytecode {
-static void print_function(ObjFunction* function) {
+namespace {
+void print_function(ObjFunction* function) {
   if (function->name == nullptr) {
     std::cout << "<script>";
     return;
@@ -14,7 +15,7 @@ static void print_function(ObjFunction* function) {
   std::cout << "<fn " << function->name->string << ">";
 }
 
-static void print_object(Value value) {
+void print_object(Value value) {
   switch (OBJ_TYPE(value)) {
     case OBJ_BOUND_METHOD:
       print_function(AS_BOUND_METHOD(value)->method->function);
@@ -44,6 +45,7 @@ static void print_object(Value value) {
       break;
   }
 }
+}  // namespace
 
 void print_value(Value value) {
 #ifdef NAN_BOXING

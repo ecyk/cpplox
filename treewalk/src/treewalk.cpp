@@ -10,10 +10,11 @@
 #include "scanner.hpp"
 
 namespace lox::treewalk {
-static bool g_had_error{};
-static bool g_had_runtime_error{};
+namespace {
+bool g_had_error{};
+bool g_had_runtime_error{};
 
-static void run(const std::string& source) {
+void run(const std::string& source) {
   Scanner scanner{source};
   std::vector<lox::Token> tokens = scanner.scan_tokens();
 
@@ -40,6 +41,7 @@ static void run(const std::string& source) {
 
   g_interpreter.interpret(statements);
 }
+}  // namespace
 
 int run_file(const std::string& path) {
   std::ifstream file_stream{path};
@@ -90,11 +92,9 @@ void error(const lox::Token& token, const std::string& message) {
   }
 }
 
-void error(size_t line, const std::string& message) {
-  report(line, "", message);
-}
+void error(int line, const std::string& message) { report(line, "", message); }
 
-void report(size_t line, const std::string& where, const std::string& message) {
+void report(int line, const std::string& where, const std::string& message) {
   std::cerr << "[line " + std::to_string(line) + "] Error" + where + ": " +
                    message
             << '\n';

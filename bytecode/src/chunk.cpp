@@ -12,22 +12,22 @@ void Chunk::write(uint8_t byte, int line) {
   lines_.push_back(line);
 }
 
-int Chunk::add_constant(Value value) {
+size_t Chunk::add_constant(Value value) {
   g_vm.push(value);
   constants_.push_back(value);
   g_vm.pop();
-  return static_cast<int>(constants_.size()) - 1;
+  return constants_.size() - 1;
 }
 
 void Chunk::disassemble(std::string_view name) const {
   std::cout << "== " << name << " ==\n";
 
-  for (int offset = 0; offset < static_cast<int>(code_.size());) {
+  for (size_t offset = 0; offset < code_.size();) {
     offset = disassemble_instruction(offset);
   }
 }
 
-int Chunk::disassemble_instruction(int offset) const {
+size_t Chunk::disassemble_instruction(size_t offset) const {
   std::cout << std::setfill('0') << std::setw(4) << offset << ' ';
   if (offset > 0 && lines_[offset] == lines_[offset - 1]) {
     std::cout << "   | ";
@@ -101,7 +101,7 @@ int Chunk::disassemble_instruction(int offset) const {
       return invoke_instruction("OP_SUPER_INVOKE", offset);
     case OP_CLOSURE: {
       offset++;
-      const int constant = code_[offset++];
+      const uint32_t constant = code_[offset++];
       std::cout << std::setfill(' ') << std::setw(16) << std::left
                 << "OP_CLOSURE" << std::setw(4) << std::right << constant
                 << ' ';
@@ -109,9 +109,9 @@ int Chunk::disassemble_instruction(int offset) const {
       std::cout << '\n';
 
       ObjFunction* function = AS_FUNCTION(constants_[constant]);
-      for (int j = 0; j < function->upvalue_count; j++) {
-        const int is_local = code_[offset++];
-        const int index = code_[offset++];
+      for (int i = 0; i < function->upvalue_count; i++) {
+        const uint32_t is_local = code_[offset++];
+        const uint32_t index = code_[offset++];
         std::cout << std::setfill('0') << std::setw(4) << std::right
                   << offset - 2 << "      |                     "
                   << (is_local != 0 ? "local" : "upvalue") << ' ' << index
@@ -136,13 +136,13 @@ int Chunk::disassemble_instruction(int offset) const {
   }
 }
 
-int Chunk::simple_instruction(std::string_view name, int offset) {
+size_t Chunk::simple_instruction(std::string_view name, size_t offset) {
   std::cout << name << '\n';
   return offset + 1;
 }
 
-int Chunk::constant_instruction(std::string_view name, int offset) const {
-  const int constant = code_[offset + 1];
+size_t Chunk::constant_instruction(std::string_view name, size_t offset) const {
+  const uint32_t constant = code_[offset + 1];
   std::cout << std::setfill(' ') << std::setw(16) << std::left << name
             << std::setw(4) << std::right << constant << " '";
   print_value(constants_[constant]);
@@ -150,25 +150,27 @@ int Chunk::constant_instruction(std::string_view name, int offset) const {
   return offset + 2;
 }
 
-int Chunk::byte_instruction(std::string_view name, int offset) const {
-  const int slot = code_[offset + 1];
+size_t Chunk::byte_instruction(std::string_view name, size_t offset) const {
+  const uint32_t slot = code_[offset + 1];
   std::cout << std::setfill(' ') << std::setw(16) << std::left << name
             << std::setw(4) << std::right << slot << '\n';
   return offset + 2;
 }
 
-int Chunk::jump_instruction(std::string_view name, int sign, int offset) const {
-  uint16_t jump = code_[offset + 1] << 8U;
+size_t Chunk::jump_instruction(std::string_view name, int sign,
+                               size_t offset) const {
+  auto jump = static_cast<uint32_t>(code_[offset + 1] << 8U);
   jump |= code_[offset + 2];
   std::cout << std::setfill(' ') << std::setw(16) << std::left << name
             << std::setw(4) << std::right << offset << " -> "
-            << offset + 3 + sign * jump << '\n';
+            << static_cast<int>(offset) + 3 + sign * static_cast<int>(jump)
+            << '\n';
   return offset + 3;
 }
 
-int Chunk::invoke_instruction(std::string_view name, int offset) const {
-  const int constant = code_[offset + 1];
-  const int arg_count = code_[offset + 2];
+size_t Chunk::invoke_instruction(std::string_view name, size_t offset) const {
+  const uint32_t constant = code_[offset + 1];
+  const uint32_t arg_count = code_[offset + 2];
   std::cout << std::setfill(' ') << std::setw(16) << std::left << name
             << std::setw(4) << std::right << '(' << arg_count << " args) "
             << std::setfill('0') << std::setw(4) << std::right << constant

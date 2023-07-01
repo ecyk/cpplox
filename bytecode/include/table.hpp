@@ -29,14 +29,14 @@ class Table {
   void remove_white();
 
   [[nodiscard]] const Entries& get_entries() const { return entries_; }
-  [[nodiscard]] int get_capacity() const { return capacity_; }
+  [[nodiscard]] uint32_t get_capacity() const { return capacity_; }
 
  private:
-  static Entry* find_entry(const Entries& entries, int capacity,
+  static Entry* find_entry(const Entries& entries, uint32_t capacity,
                            const ObjString* key);
-  void adjust_capacity(int capacity);
+  void adjust_capacity(uint32_t capacity);
 
-  int size_{}, capacity_{INITIAL_CAPACITY};
+  uint32_t size_{}, capacity_{INITIAL_CAPACITY};
   Entries entries_;
 };
 }  // namespace lox::bytecode

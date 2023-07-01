@@ -1,7 +1,6 @@
 #include "compiler.hpp"
 
 #include <iostream>
-#include <limits>
 
 #include "vm.hpp"
 
@@ -53,7 +52,7 @@ std::array<Compiler::ParseRule, TOKEN_COUNT> Compiler::rules{{
 }};
 
 Compiler::Compiler(Scanner& scanner, FunctionType type, Compiler* enclosing)
-    : scanner_{&scanner}, type_{type}, enclosing_{enclosing} {
+    : type_{type}, enclosing_{enclosing}, scanner_{&scanner} {
   g_current_compiler = this;
 
   function_ = g_vm.allocate_object<ObjFunction>();
@@ -129,19 +128,17 @@ void Compiler::emit_return() {
   emit_byte(OP_RETURN);
 }
 
-int Compiler::emit_jump(uint8_t instruction) {
+uint32_t Compiler::emit_jump(uint8_t instruction) {
   emit_byte(instruction);
-  emit_byte(0xff);
-  emit_byte(0xff);
-  return static_cast<int>(current_chunk()->get_codes().size()) - 2;
+  emit_byte(0xFF);
+  emit_byte(0xFF);
+  return current_chunk_size() - 2;
 }
 
-void Compiler::patch_jump(int offset) {
-  const unsigned int jump =
-      static_cast<unsigned int>(current_chunk()->get_codes().size()) - offset -
-      2;
+void Compiler::patch_jump(uint32_t offset) {
+  const uint32_t jump = current_chunk_size() - offset - 2;
 
-  if (jump > UINT16_MAX) {
+  if (jump > std::numeric_limits<uint16_t>::max()) {
     error("Too much code to jump over.");
   }
 
@@ -149,13 +146,11 @@ void Compiler::patch_jump(int offset) {
   current_chunk()->set_code(offset + 1, jump & 0xFFU);
 }
 
-void Compiler::emit_loop(int loop_start) {
+void Compiler::emit_loop(uint32_t loop_start) {
   emit_byte(OP_LOOP);
 
-  const unsigned int offset =
-      static_cast<unsigned int>(current_chunk()->get_codes().size()) -
-      loop_start + 2;
-  if (offset > UINT16_MAX) {
+  const uint32_t offset = current_chunk_size() - loop_start + 2;
+  if (offset > std::numeric_limits<uint16_t>::max()) {
     error("Loop body too large.");
   }
 
@@ -265,7 +260,7 @@ void Compiler::function(FunctionType type) {
 
   emit_bytes(OP_CLOSURE, make_constant(OBJ_VAL(function)));
 
-  for (int i = 0; i < function->upvalue_count; i++) {
+  for (size_t i = 0; i < function->upvalue_count; i++) {
     emit_byte(compiler.upvalues_[i].is_local ? 1 : 0);
     emit_byte(compiler.upvalues_[i].index);
   }
@@ -315,11 +310,11 @@ void Compiler::if_statement() {
   expression();
   consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
 
-  const int then_jump = emit_jump(OP_JUMP_IF_FALSE);
+  const uint32_t then_jump = emit_jump(OP_JUMP_IF_FALSE);
   emit_byte(OP_POP);
   statement();
 
-  const int else_jump = emit_jump(OP_JUMP);
+  const uint32_t else_jump = emit_jump(OP_JUMP);
 
   patch_jump(then_jump);
   emit_byte(OP_POP);
@@ -350,13 +345,13 @@ void Compiler::return_statement() {
 }
 
 void Compiler::while_statement() {
-  const int loop_start = static_cast<int>(current_chunk()->get_codes().size());
+  const uint32_t loop_start = current_chunk_size();
 
   consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
   expression();
   consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
 
-  const int exit_jump = emit_jump(OP_JUMP_IF_FALSE);
+  const uint32_t exit_jump = emit_jump(OP_JUMP_IF_FALSE);
   emit_byte(OP_POP);
   statement();
   emit_loop(loop_start);
@@ -377,8 +372,9 @@ void Compiler::for_statement() {
     expression_statement();
   }
 
-  int loop_start = static_cast<int>(current_chunk()->get_codes().size());
-  int exit_jump = -1;
+  uint32_t loop_start = current_chunk_size();
+  std::optional<uint32_t> exit_jump;
+
   if (!match(TOKEN_SEMICOLON)) {
     expression();
     consume(TOKEN_SEMICOLON, "Expect ';' after loop condition.");
@@ -388,9 +384,8 @@ void Compiler::for_statement() {
   }
 
   if (!match(TOKEN_RIGHT_PAREN)) {
-    const int body_jump = emit_jump(OP_JUMP);
-    const int increment_start =
-        static_cast<int>(current_chunk()->get_codes().size());
+    const uint32_t body_jump = emit_jump(OP_JUMP);
+    const uint32_t increment_start = current_chunk_size();
     expression();
     emit_byte(OP_POP);
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
@@ -403,8 +398,8 @@ void Compiler::for_statement() {
   statement();
   emit_loop(loop_start);
 
-  if (exit_jump != -1) {
-    patch_jump(exit_jump);
+  if (exit_jump) {
+    patch_jump(*exit_jump);
     emit_byte(OP_POP);
   }
 
@@ -460,10 +455,10 @@ void Compiler::super_(bool /*can_assign*/) {
 
   named_variable(Token{TOKEN_THIS, "this", 0}, false);
   if (match(TOKEN_LEFT_PAREN)) {
-    const uint8_t argCount = argument_list();
+    const uint8_t arg_count = argument_list();
     named_variable(Token{TOKEN_SUPER, "super", 0}, false);
     emit_bytes(OP_SUPER_INVOKE, name);
-    emit_byte(argCount);
+    emit_byte(arg_count);
   } else {
     named_variable(Token{TOKEN_SUPER, "super", 0}, false);
     emit_bytes(OP_GET_SUPER, name);
@@ -487,16 +482,16 @@ void Compiler::dot(bool can_assign) {
     expression();
     emit_bytes(OP_SET_PROPERTY, name);
   } else if (match(TOKEN_LEFT_PAREN)) {
-    const uint8_t argCount = argument_list();
+    const uint8_t arg_count = argument_list();
     emit_bytes(OP_INVOKE, name);
-    emit_byte(argCount);
+    emit_byte(arg_count);
   } else {
     emit_bytes(OP_GET_PROPERTY, name);
   }
 }
 
 void Compiler::and_(bool /*can_assign*/) {
-  const int end_jump = emit_jump(OP_JUMP_IF_FALSE);
+  const uint32_t end_jump = emit_jump(OP_JUMP_IF_FALSE);
 
   emit_byte(OP_POP);
   parse_precedence(PREC_AND);
@@ -505,8 +500,8 @@ void Compiler::and_(bool /*can_assign*/) {
 }
 
 void Compiler::or_(bool /*can_assign*/) {
-  const int else_jump = emit_jump(OP_JUMP_IF_FALSE);
-  const int end_jump = emit_jump(OP_JUMP);
+  const uint32_t else_jump = emit_jump(OP_JUMP_IF_FALSE);
+  const uint32_t end_jump = emit_jump(OP_JUMP);
 
   patch_jump(else_jump);
   emit_byte(OP_POP);
@@ -606,11 +601,11 @@ void Compiler::named_variable(const lox::Token& name, bool can_assign) {
   uint8_t get_op = OP_GET_GLOBAL;
   uint8_t set_op = OP_SET_GLOBAL;
 
-  int arg = resolve_local(name);
-  if (arg != -1) {
+  auto arg = resolve_local(name);
+  if (arg) {
     get_op = OP_GET_LOCAL;
     set_op = OP_SET_LOCAL;
-  } else if ((arg = resolve_upvalue(name)) != -1) {
+  } else if ((arg = resolve_upvalue(name))) {
     get_op = OP_GET_UPVALUE;
     set_op = OP_SET_UPVALUE;
   } else {
@@ -619,9 +614,9 @@ void Compiler::named_variable(const lox::Token& name, bool can_assign) {
 
   if (can_assign && match(TOKEN_EQUAL)) {
     expression();
-    emit_bytes(set_op, arg);
+    emit_bytes(set_op, *arg);
   } else {
-    emit_bytes(get_op, arg);
+    emit_bytes(get_op, *arg);
   }
 }
 
@@ -646,13 +641,13 @@ void Compiler::declare_variable() {
     return;
   }
 
-  for (int i = local_count_ - 1; i >= 0; i--) {
+  for (size_t i = local_count_; i-- > 0;) {
     const Local& local = locals_[i];
     if (local.depth != -1 && local.depth < scope_depth_) {
       break;
     }
 
-    if (previous.lexeme == local.name.lexeme) {
+    if (local.name.lexeme == previous.lexeme) {
       error("Already a variable with this name in this scope.");
     }
   }
@@ -669,10 +664,10 @@ void Compiler::define_variable(uint8_t global) {
   emit_bytes(OP_DEFINE_GLOBAL, global);
 }
 
-int Compiler::resolve_local(const lox::Token& name) {
-  for (int i = local_count_ - 1; i >= 0; i--) {
+std::optional<uint8_t> Compiler::resolve_local(const lox::Token& name) {
+  for (size_t i = local_count_; i-- > 0;) {
     const Local& local = locals_[i];
-    if (name.lexeme == local.name.lexeme) {
+    if (local.name.lexeme == name.lexeme) {
       if (local.depth == -1) {
         error("Can't read local variable in its own initializer.");
       }
@@ -680,26 +675,26 @@ int Compiler::resolve_local(const lox::Token& name) {
     }
   }
 
-  return -1;
+  return {};
 }
 
-int Compiler::resolve_upvalue(const lox::Token& name) {
+std::optional<uint8_t> Compiler::resolve_upvalue(const lox::Token& name) {
   if (enclosing_ == nullptr) {
-    return -1;
+    return {};
   }
 
-  const int local = enclosing_->resolve_local(name);
-  if (local != -1) {
-    enclosing_->locals_[local].is_captured = true;
-    return add_upvalue(local, true);
+  const auto local = enclosing_->resolve_local(name);
+  if (local) {
+    enclosing_->locals_[*local].is_captured = true;
+    return add_upvalue(*local, true);
   }
 
-  const int upvalue = enclosing_->resolve_upvalue(name);
-  if (upvalue != -1) {
-    return add_upvalue(upvalue, false);
+  const auto upvalue = enclosing_->resolve_upvalue(name);
+  if (upvalue) {
+    return add_upvalue(*upvalue, false);
   }
 
-  return -1;
+  return {};
 }
 
 void Compiler::add_local(const lox::Token& name) {
@@ -713,10 +708,10 @@ void Compiler::add_local(const lox::Token& name) {
   local.depth = -1;
 }
 
-int Compiler::add_upvalue(uint8_t index, bool is_local) {
-  const int upvalue_count = function_->upvalue_count;
+std::optional<uint8_t> Compiler::add_upvalue(uint8_t index, bool is_local) {
+  const uint16_t upvalue_count = function_->upvalue_count;
 
-  for (int i = 0; i < upvalue_count; i++) {
+  for (size_t i = 0; i < upvalue_count; i++) {
     Upvalue* upvalue = &upvalues_[i];
     if (upvalue->index == index && upvalue->is_local == is_local) {
       return i;
@@ -742,8 +737,8 @@ void Compiler::mark_initialized() {
 }
 
 uint8_t Compiler::make_constant(Value value) {
-  const int index = current_chunk()->add_constant(value);
-  if (index > std::numeric_limits<uint8_t>::max()) {
+  const size_t index = current_chunk()->add_constant(value);
+  if (index >= UINT8_COUNT) {
     error("Too many constants in one chunk.");
     return 0;
   }

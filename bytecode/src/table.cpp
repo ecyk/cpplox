@@ -4,7 +4,8 @@
 
 namespace lox::bytecode {
 bool Table::set(ObjString* key, Value value) {
-  if (size_ + 1 > static_cast<int>(static_cast<float>(capacity_) * MAX_LOAD)) {
+  if (size_ + 1 >
+      static_cast<uint32_t>(static_cast<float>(capacity_) * MAX_LOAD)) {
     adjust_capacity(capacity_ * 2);
   }
 
@@ -49,7 +50,7 @@ bool Table::del(ObjString* key) {
 }
 
 void Table::add_all(Table& to) const {
-  for (int i = 0; i < capacity_; i++) {
+  for (uint32_t i = 0; i < capacity_; i++) {
     Entry* entry = &entries_[i];
     if (entry->key != nullptr) {
       to.set(entry->key, entry->value);
@@ -78,7 +79,7 @@ ObjString* Table::find_string(std::string_view string, uint32_t hash) const {
 }
 
 void Table::remove_white() {
-  for (int i = 0; i < capacity_; i++) {
+  for (uint32_t i = 0; i < capacity_; i++) {
     Entry* entry = &entries_[i];
     if (entry->key != nullptr && !entry->key->is_marked) {
       del(entry->key);
@@ -86,7 +87,7 @@ void Table::remove_white() {
   }
 }
 
-Entry* Table::find_entry(const Entries& entries, int capacity,
+Entry* Table::find_entry(const Entries& entries, uint32_t capacity,
                          const ObjString* key) {
   uint32_t index = key->hash & (capacity - 1U);
   Entry* tombstone = nullptr;
@@ -109,11 +110,11 @@ Entry* Table::find_entry(const Entries& entries, int capacity,
   }
 }
 
-void Table::adjust_capacity(int capacity) {
+void Table::adjust_capacity(uint32_t capacity) {
   auto entries = std::make_unique<Entry[]>(capacity);
 
   size_ = 0;
-  for (int i = 0; i < capacity_; i++) {
+  for (uint32_t i = 0; i < capacity_; i++) {
     Entry* entry = &entries_[i];
     if (entry->key == nullptr) {
       continue;

@@ -3,7 +3,8 @@
 #include <chrono>
 
 namespace lox::bytecode {
-static Value clock_native(int /*arg_count*/, Value* /*args*/) {
+namespace {
+Value clock_native(int /*arg_count*/, Value* /*args*/) {
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch())
                 .count();
@@ -11,6 +12,7 @@ static Value clock_native(int /*arg_count*/, Value* /*args*/) {
   constexpr double ms_to_seconds = 1.0 / 1000;
   return NUMBER_VAL(static_cast<double>(ms) * ms_to_seconds);
 }
+}  // namespace
 
 VM::VM() {
   reset_stack();
@@ -60,12 +62,12 @@ InterpretResult VM::run() {
     }
     std::cout << '\n';
     frame_top_->closure->function->chunk.disassemble_instruction(
-        static_cast<int>(
+        static_cast<size_t>(
             frame_top_->ip -
             frame_top_->closure->function->chunk.get_codes().data()));
 #endif
 
-    switch (const uint8_t instruction = read_byte()) {
+    switch (read_byte()) {
       case OP_CONSTANT:
         push(read_constant());
         break;
@@ -269,7 +271,7 @@ InterpretResult VM::run() {
         ObjFunction* function = AS_FUNCTION(read_constant());
         auto* closure = allocate_object<ObjClosure>(function);
         push(OBJ_VAL(closure));
-        for (int i = 0; i < closure->upvalue_count; i++) {
+        for (size_t i = 0; i < closure->upvalue_count; i++) {
           const uint8_t is_local = read_byte();
           const uint8_t index = read_byte();
           if (is_local != 0) {
@@ -471,11 +473,11 @@ void VM::close_upvalues(const Value* last) {
 void VM::runtime_error(const std::string& message) {
   std::cerr << message << '\n';
 
-  for (int i = frame_count_ - 1; i >= 0; i--) {
+  for (size_t i = frame_count_; i-- > 0;) {
     CallFrame* frame = &frames_[i];
     ObjFunction* function = frame->closure->function;
-    const int instruction =
-        static_cast<int>(frame->ip - function->chunk.get_codes().data() - 1);
+    const auto instruction =
+        static_cast<size_t>(frame->ip - function->chunk.get_codes().data() - 1);
     std::cerr << "[line " << function->chunk.get_lines()[instruction]
               << "] in ";
     if (function->name == nullptr) {
@@ -514,7 +516,8 @@ void VM::free_objects() {
   while (object != nullptr) {
     Obj* next = object->next_object;
 #ifdef DEBUG_LOG_GC
-    std::cout << (void*)object << " free type " << object->type << '\n';
+    std::cout << static_cast<void*>(object) << " free type " << object->type
+              << '\n';
 #endif
     delete object;
     object = next;
@@ -530,7 +533,7 @@ void VM::mark_object(Obj* object) {
   }
 
 #ifdef DEBUG_LOG_GC
-  std::cout << (void*)object << " mark ";
+  std::cout << static_cast<void*>(object) << " mark ";
   print_value(OBJ_VAL(object));
   std::cout << '\n';
 #endif
@@ -547,7 +550,7 @@ void VM::mark_value(Value value) {
 }
 
 void VM::mark_table(const Table& table) {
-  for (int i = 0; i < table.get_capacity(); i++) {
+  for (size_t i = 0; i < table.get_capacity(); i++) {
     Entry* entry = &table.get_entries()[i];
     mark_object(static_cast<Obj*>(entry->key));
     mark_value(entry->value);
@@ -556,7 +559,7 @@ void VM::mark_table(const Table& table) {
 
 void VM::blacken_object(Obj* object) {
 #ifdef DEBUG_LOG_GC
-  std::cout << (void*)object << " blacken ";
+  std::cout << static_cast<void*>(object) << " blacken ";
   print_value(OBJ_VAL(object));
   std::cout << '\n';
 #endif
@@ -577,7 +580,7 @@ void VM::blacken_object(Obj* object) {
     case OBJ_CLOSURE: {
       auto* closure = static_cast<ObjClosure*>(object);
       mark_object(closure->function);
-      for (int i = 0; i < closure->upvalue_count; i++) {
+      for (size_t i = 0; i < closure->upvalue_count; i++) {
         mark_object(closure->upvalues[i]);
       }
       break;
@@ -615,7 +618,7 @@ void VM::mark_roots() {
   }
   mark_object(init_string_);
 
-  for (int i = 0; i < frame_count_; i++) {
+  for (size_t i = 0; i < frame_count_; i++) {
     mark_object(static_cast<Obj*>(frames_[i].closure));
   }
 
@@ -678,7 +681,8 @@ void VM::sweep() {
       }
 
 #ifdef DEBUG_LOG_GC
-      std::cout << (void*)unreached << " free type " << unreached->type << '\n';
+      std::cout << static_cast<void*>(unreached) << " free type "
+                << unreached->type << '\n';
 #endif
       delete unreached;
     }

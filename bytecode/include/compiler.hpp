@@ -1,6 +1,8 @@
 #pragma once
 
 #include <array>
+#include <limits>
+#include <optional>
 
 #include "object.hpp"
 #include "scanner.hpp"
@@ -75,9 +77,9 @@ class Compiler {
   void emit_bytes(uint8_t byte1, uint8_t byte2);
   void emit_constant(Value value);
   void emit_return();
-  int emit_jump(uint8_t instruction);
-  void patch_jump(int offset);
-  void emit_loop(int loop_start);
+  uint32_t emit_jump(uint8_t instruction);
+  void patch_jump(uint32_t offset);
+  void emit_loop(uint32_t loop_start);
 
   void declaration();
   void class_declaration();
@@ -113,10 +115,10 @@ class Compiler {
   uint8_t parse_variable(std::string_view error_message);
   void declare_variable();
   void define_variable(uint8_t global);
-  int resolve_local(const lox::Token& name);
-  int resolve_upvalue(const lox::Token& name);
+  std::optional<uint8_t> resolve_local(const lox::Token& name);
+  std::optional<uint8_t> resolve_upvalue(const lox::Token& name);
   void add_local(const lox::Token& name);
-  int add_upvalue(uint8_t index, bool is_local);
+  std::optional<uint8_t> add_upvalue(uint8_t index, bool is_local);
   void mark_initialized();
   uint8_t make_constant(Value value);
   uint8_t identifier_constant(const lox::Token& name);
@@ -124,6 +126,9 @@ class Compiler {
   void end_scope();
 
   Chunk* current_chunk() { return &function_->chunk; }
+  uint32_t current_chunk_size() {
+    return static_cast<uint32_t>(current_chunk()->get_codes().size());
+  }
 
   static ParseRule* get_rule(TokenType type) { return &rules[type]; }
   void parse_precedence(Precedence precedence);
@@ -145,7 +150,7 @@ class Compiler {
   FunctionType type_;
 
   std::array<Local, UINT8_COUNT> locals_;
-  int local_count_{};
+  uint16_t local_count_{};
   std::array<Upvalue, UINT8_COUNT> upvalues_;
   int scope_depth_{};
 

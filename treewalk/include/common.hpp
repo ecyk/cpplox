@@ -6,7 +6,8 @@
 
 namespace lox::treewalk {
 struct Hash {
-  using is_transparent = void;
+  using is_transparent [[maybe_unused]] = void;
+
   [[nodiscard]] size_t operator()(const char* string) const {
     return std::hash<std::string_view>{}(string);
   }

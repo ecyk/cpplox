@@ -6,7 +6,8 @@
 #include "treewalk.hpp"
 
 namespace lox::treewalk {
-static Value clock_native(int /*arg_count*/, Value* /*args*/) {
+namespace {
+Value clock_native(int /*arg_count*/, Value* /*args*/) {
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::system_clock::now().time_since_epoch())
                 .count();
@@ -14,6 +15,7 @@ static Value clock_native(int /*arg_count*/, Value* /*args*/) {
   constexpr double ms_to_seconds = 1.0 / 1000;
   return static_cast<double>(ms) * ms_to_seconds;
 }
+}  // namespace
 
 Interpreter::Interpreter()
     : environment_{make_environment()}, globals_{environment_} {
@@ -427,7 +429,7 @@ Value Interpreter::call_function(const std::shared_ptr<Function>& function,
                                  std::vector<Value> arguments) {
   auto* environment = make_environment(function->closure);
 
-  for (int i = 0; i < function->declaration->params.size(); i++) {
+  for (size_t i = 0; i < function->declaration->params.size(); i++) {
     environment->define(std::string{function->declaration->params[i].lexeme},
                         arguments[i]);
   }
@@ -457,7 +459,7 @@ Value Interpreter::call_native(const std::shared_ptr<Native>& native,
 Value Interpreter::call_value(const Value& callee, std::vector<Value> arguments,
                               const lox::Token& token) {
   auto check_arity = [&](int arity) {
-    if (arity != arguments.size()) {
+    if (arity != static_cast<int>(arguments.size())) {
       throw RuntimeError{token, "Expected " + std::to_string(arity) +
                                     " arguments but got " +
                                     std::to_string(arguments.size()) + "."};

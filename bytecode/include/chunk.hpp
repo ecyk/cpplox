@@ -46,25 +46,27 @@ enum OpCode : uint8_t {
 class Chunk {
  public:
   void write(uint8_t byte, int line);
-  int add_constant(Value value);
+  size_t add_constant(Value value);
 
   void disassemble(std::string_view name) const;
-  int disassemble_instruction(int offset) const;
+  size_t disassemble_instruction(size_t offset) const;
 
   [[nodiscard]] const std::vector<uint8_t>& get_codes() const { return code_; }
   [[nodiscard]] const std::vector<int>& get_lines() const { return lines_; }
   [[nodiscard]] const ValueArray& get_constants() const { return constants_; }
 
-  void set_code(int offset, uint8_t value) { code_[offset] = value; }
+  void set_code(size_t offset, uint8_t value) { code_[offset] = value; }
 
  private:
-  static int simple_instruction(std::string_view name, int offset);
-  [[nodiscard]] int constant_instruction(std::string_view name,
-                                         int offset) const;
-  [[nodiscard]] int byte_instruction(std::string_view name, int offset) const;
-  [[nodiscard]] int jump_instruction(std::string_view name, int sign,
-                                     int offset) const;
-  [[nodiscard]] int invoke_instruction(std::string_view name, int offset) const;
+  static size_t simple_instruction(std::string_view name, size_t offset);
+  [[nodiscard]] size_t constant_instruction(std::string_view name,
+                                            size_t offset) const;
+  [[nodiscard]] size_t byte_instruction(std::string_view name,
+                                        size_t offset) const;
+  [[nodiscard]] size_t jump_instruction(std::string_view name, int sign,
+                                        size_t offset) const;
+  [[nodiscard]] size_t invoke_instruction(std::string_view name,
+                                          size_t offset) const;
 
   std::vector<uint8_t> code_;
   std::vector<int> lines_;

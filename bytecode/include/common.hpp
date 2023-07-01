@@ -15,7 +15,7 @@ inline static constexpr int UINT8_COUNT = 256;
 inline uint32_t hash(std::string_view key) {
   uint32_t hash = 2166136261;
   for (const char i : key) {
-    hash ^= (uint8_t)i;
+    hash ^= static_cast<uint8_t>(i);
     hash *= 16777619;
   }
 

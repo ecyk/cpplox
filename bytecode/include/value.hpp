@@ -6,22 +6,19 @@
 
 #ifdef NAN_BOXING
 
-#define SIGN_BIT (static_cast<uint64_t>(0x8000000000000000))
-#define QNAN (static_cast<uint64_t>(0x7ffc000000000000))
+#define SIGN_BIT (0x8000000000000000U)
+#define QNAN (0x7ffc000000000000U)
 
 #define TAG_NIL 1U
 #define TAG_FALSE 2U
 #define TAG_TRUE 3U
 
 #define BOOL_VAL(bool) ((bool) ? TRUE_VAL : FALSE_VAL)
-#define FALSE_VAL (static_cast<Value>(QNAN | TAG_FALSE))
-#define TRUE_VAL (static_cast<Value>(QNAN | TAG_TRUE))
-#define NIL_VAL (static_cast<Value>(QNAN | TAG_NIL))
+#define FALSE_VAL (QNAN | TAG_FALSE)
+#define TRUE_VAL (QNAN | TAG_TRUE)
+#define NIL_VAL (QNAN | TAG_NIL)
 #define NUMBER_VAL(number) (number_to_value(number))
-#define OBJ_VAL(obj)    \
-  (static_cast<Value>(  \
-      SIGN_BIT | QNAN | \
-      static_cast<uint64_t>(reinterpret_cast<uintptr_t>(obj))))
+#define OBJ_VAL(obj) (SIGN_BIT | QNAN | reinterpret_cast<uintptr_t>(obj))
 
 #define IS_BOOL(value) (((value) | 1U) == TRUE_VAL)
 #define IS_NIL(value) ((value) == NIL_VAL)
@@ -30,8 +27,7 @@
 
 #define AS_BOOL(value) ((value) == TRUE_VAL)
 #define AS_NUMBER(value) (value_to_number(value))
-#define AS_OBJ(value) \
-  (reinterpret_cast<Obj*>(static_cast<uintptr_t>((value) & ~(SIGN_BIT | QNAN))))
+#define AS_OBJ(value) (reinterpret_cast<Obj*>((value) & ~(SIGN_BIT | QNAN)))
 
 #else
 

@@ -136,7 +136,7 @@ void Resolver::visit(expr::Get& get) { resolve(get.object); }
 
 void Resolver::visit(expr::Grouping& grouping) { resolve(grouping.expr); }
 
-void Resolver::visit(expr::Literal& literal) {}
+void Resolver::visit(expr::Literal& /*literal*/) {}
 
 void Resolver::visit(expr::Logical& logical) {
   resolve(logical.left);
@@ -210,12 +210,9 @@ void Resolver::define(const lox::Token& name) {
 }
 
 void Resolver::resolve_local(expr::Expr& expr, const lox::Token& name) {
-  const int size = static_cast<int>(scopes_.size());
-  for (int i = size - 1; i >= 0; i--) {
-    const ScopeMap& scope = scopes_[i];
-
-    if (scope.find(name.lexeme) != scope.end()) {
-      expr.depth = size - 1 - i;
+  for (size_t i = scopes_.size(); i-- > 0;) {
+    if (scopes_[i].contains(name.lexeme)) {
+      expr.depth = static_cast<int>(scopes_.size() - 1 - i);
       return;
     }
   }

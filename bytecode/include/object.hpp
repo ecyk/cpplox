@@ -54,7 +54,7 @@ struct ObjFunction : Obj {
   ObjFunction() : Obj{OBJ_FUNCTION} {}
 
   int arity{};
-  int upvalue_count{};
+  uint16_t upvalue_count{};
   Chunk chunk;
   ObjString* name{};
 };
@@ -95,7 +95,7 @@ struct ObjClosure : Obj {
 
   ObjFunction* function;
   std::vector<ObjUpvalue*> upvalues;
-  int upvalue_count;
+  uint16_t upvalue_count;
 };
 
 struct ObjClass : Obj {

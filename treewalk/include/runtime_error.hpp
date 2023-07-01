@@ -8,7 +8,7 @@
 namespace lox::treewalk {
 struct RuntimeError : std::runtime_error {
   RuntimeError(const Token& token, const std::string& message)
-      : token{token}, runtime_error{message} {}
+      : runtime_error{message}, token{token} {}
 
   Token token;
 };

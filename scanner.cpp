@@ -6,7 +6,7 @@
 namespace lox {
 Token Scanner::scan_token() {
   for (;;) {
-    switch (const char c = peek()) {
+    switch (peek()) {
       case ' ':
       case '\r':
       case '\t':
@@ -126,10 +126,10 @@ Token Scanner::identifier() {
 }
 
 TokenType Scanner::identifier_type() const {
-  auto check_keyword = [&](int start, int length, const char* rest,
-                           TokenType type) {
+  auto check_keyword = [this](int start, int length, const char* rest,
+                              TokenType type) {
     if (current_ - start_ == start + length &&
-        memcmp(start_ + start, rest, length) == 0) {
+        memcmp(start_ + start, rest, static_cast<size_t>(length)) == 0) {
       return type;
     }
 

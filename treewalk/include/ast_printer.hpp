@@ -4,6 +4,8 @@
 
 namespace lox::treewalk {
 class AstPrinter : public expr::Visitor {
+  using expr::Visitor::visit;
+
  public:
   std::string print(const std::unique_ptr<Expr>& expr);
 

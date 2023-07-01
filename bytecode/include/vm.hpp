@@ -70,7 +70,7 @@ class VM {
 
   std::array<CallFrame, FRAMES_MAX> frames_;
   CallFrame* frame_top_{};
-  int frame_count_{};
+  uint8_t frame_count_{};
 
   std::array<Value, STACK_MAX> stack_{};
   Value* stack_top_{};
@@ -115,8 +115,8 @@ class VM {
     bytes_allocated_ += sizeof(ObjT);
 
 #ifdef DEBUG_LOG_GC
-    std::cout << (void*)object << " allocate " << sizeof(ObjT) << " for "
-              << object->type << "\n";
+    std::cout << static_cast<void*>(object) << " allocate " << sizeof(ObjT)
+              << " for " << object->type << "\n";
 #endif
 
     return object;
@@ -139,7 +139,7 @@ class VM {
   size_t next_gc_{static_cast<size_t>(1024 * 1024)};
   std::stack<Obj*> gray_stack_;
 
-  friend int Chunk::add_constant(Value value);
+  friend size_t Chunk::add_constant(Value value);
   friend void Compiler::mark_compiler_roots();
 };
 

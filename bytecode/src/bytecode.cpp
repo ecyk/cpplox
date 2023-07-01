@@ -7,7 +7,8 @@
 #include "vm.hpp"
 
 namespace lox::bytecode {
-static InterpretResult run(const std::string& source) {
+namespace {
+InterpretResult run(const std::string& source) {
   Scanner scanner{source};
   Compiler compiler{scanner};
 
@@ -18,6 +19,7 @@ static InterpretResult run(const std::string& source) {
 
   return g_vm.interpret(function);
 }
+}  // namespace
 
 int run_file(const std::string& path) {
   std::ifstream file_stream{path};
