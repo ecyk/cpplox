@@ -1,7 +1,6 @@
 #include "interpreter.hpp"
 
 #include <chrono>
-#include <iostream>
 
 #include "treewalk.hpp"
 
@@ -17,12 +16,17 @@ Value clock_native(int /*arg_count*/, Value* /*args*/) {
 }
 }  // namespace
 
-Interpreter::Interpreter()
-    : environment_{make_environment()}, globals_{environment_} {
-  environment_->define("clock", std::make_shared<Native>(clock_native, 0));
+Interpreter::Interpreter() {
+  const StackObject environment{allocate_object<Environment>(), this};
+
+  environment_ = static_cast<Environment*>(environment);
+  globals_ = static_cast<Environment*>(environment);
+
+  const StackObject clock{allocate_object<ObjNative>(clock_native, 0), this};
+  environment_->define("clock", static_cast<ObjNative*>(clock));
 }
 
-void Interpreter::interpret(std::vector<std::unique_ptr<Stmt>>& statements) {
+void Interpreter::interpret(std::vector<std::unique_ptr<Stmt>> statements) {
   try {
     for (auto& statement : statements) {
       execute(statement);
@@ -36,6 +40,19 @@ void Interpreter::interpret(std::vector<std::unique_ptr<Stmt>>& statements) {
                      std::make_move_iterator(statements.end()));
 }
 
+void Interpreter::free_objects() const {
+  Obj* object = objects_;
+  while (object != nullptr) {
+    Obj* next = object->next_object;
+#ifdef DEBUG_LOG_GC
+    std::cout << static_cast<void*>(object) << " free type "
+              << static_cast<int>(object->type) << '\n';
+#endif
+    delete object;
+    object = next;
+  }
+}
+
 void Interpreter::execute_block(
     const std::vector<std::unique_ptr<Stmt>>& statements,
     Environment* environment) {
@@ -45,7 +62,6 @@ void Interpreter::execute_block(
   }
 
   Environment* previous = environment_;
-  call_stack_.push_back(previous);
 
   // try {
   environment_ = environment;
@@ -58,16 +74,7 @@ void Interpreter::execute_block(
   //   throw;
   // }
 
-  environment_ = call_stack_.back();
-  call_stack_.pop_back();
-}
-
-void Interpreter::free_environments() {
-  for (auto it = environments_.begin(); it != environments_.end();) {
-    Environment* environment = *it;
-    environments_.erase(it++);
-    delete environment;
-  }
+  environment_ = previous;
 }
 
 void Interpreter::execute(const std::unique_ptr<Stmt>& stmt) {
@@ -79,47 +86,52 @@ void Interpreter::execute(const std::unique_ptr<Stmt>& stmt) {
 }
 
 void Interpreter::visit(stmt::Block& block) {
-  execute_block(block.statements, make_environment(environment_));
+  const StackObject environment{allocate_object<Environment>(environment_),
+                                this};
+  execute_block(block.statements, static_cast<Environment*>(environment));
 }
 
 void Interpreter::visit(stmt::Class& class_) {
-  Value superclass;
+  ObjClass* superclass{};
   if (class_.superclass) {
-    superclass = look_up_variable(class_.superclass->name, *class_.superclass);
-    if (!IS_CLASS(superclass)) {
+    const Value& variable =
+        look_up_variable(class_.superclass->name, *class_.superclass);
+
+    if (IS_CLASS(variable)) {
+      superclass = AS_CLASS(variable);
+    } else {
       throw RuntimeError{class_.superclass->name,
                          "Superclass must be a class."};
     }
   }
 
-  environment_->define(std::string{class_.name.lexeme}, {});
+  environment_->define(class_.name.lexeme, {});
 
-  if (!IS_NIL(superclass)) {
-    environment_ = make_environment(environment_);
+  if (superclass != nullptr) {
+    environment_ = allocate_object<Environment>(environment_);
     environment_->define("super", superclass);
   }
 
   Methods methods;
   for (auto& method : class_.methods) {
-    methods.insert_or_assign(
-        std::string{method.name.lexeme},
-        Function{environment_, &method, static_cast<int>(method.params.size()),
-                 method.name.lexeme == "init"});
+    methods.insert_or_assign(method.name.lexeme,
+                             ObjFunction{environment_, &method,
+                                         static_cast<int>(method.params.size()),
+                                         method.name.lexeme == "init"});
   }
 
-  if (!IS_NIL(superclass)) {
+  auto* object =
+      allocate_object<ObjClass>(std::move(methods), &class_, superclass, 0);
+
+  if (superclass != nullptr) {
     environment_ = environment_->get_enclosing();
   }
-
-  auto class_object = std::make_shared<Class>(
-      std::move(methods), &class_,
-      IS_CLASS(superclass) ? AS_CLASS(superclass).get() : nullptr, 0);
-
-  if (Function* initializer = find_method(*class_object, "init")) {
-    class_object->arity = initializer->arity;
+  
+  if (ObjFunction* initializer = find_method(object, "init")) {
+    object->arity = initializer->arity;
   }
 
-  environment_->assign(class_.name, class_object);
+  environment_->assign(class_.name, object);
 }
 
 void Interpreter::visit(stmt::Expression& expression) {
@@ -127,10 +139,10 @@ void Interpreter::visit(stmt::Expression& expression) {
 }
 
 void Interpreter::visit(stmt::Function& function) {
-  environment_->define(std::string{function.name.lexeme},
-                       {std::make_shared<Function>(
+  environment_->define(function.name.lexeme,
+                       allocate_object<ObjFunction>(
                            environment_, &function,
-                           static_cast<int>(function.params.size()), false)});
+                           static_cast<int>(function.params.size()), false));
 }
 
 void Interpreter::visit(stmt::If& if_) {
@@ -164,7 +176,7 @@ void Interpreter::visit(stmt::Var& var) {
     return_value_ = {};
   }
 
-  environment_->define(std::string{var.name.lexeme}, return_value_);
+  environment_->define(var.name.lexeme, return_value_);
 }
 
 void Interpreter::visit(stmt::While& while_) {
@@ -193,7 +205,16 @@ void Interpreter::visit(expr::Assign& assign) {
 
 void Interpreter::visit(expr::Binary& binary) {
   Value left = evaluate(binary.left);
+
+  if (IS_OBJ(left)) {
+    stack_.push_back(AS_OBJ(left));
+  }
+
   const Value& right = evaluate(binary.right);
+
+  if (IS_OBJ(left)) {
+    stack_.pop_back();
+  }
 
   switch (binary.op.type) {
     case TOKEN_BANG_EQUAL:
@@ -266,18 +287,18 @@ void Interpreter::visit(expr::Get& get) {
   if (IS_INSTANCE(value)) {
     const auto& instance = AS_INSTANCE(value);
 
-    if (Value* field = find_field(*instance, get.name.lexeme)) {
+    if (Value* field = find_field(instance, get.name.lexeme)) {
       return_value_ = *field;
       return;
     }
 
-    if (Function* method = find_method(*instance->class_, get.name.lexeme)) {
-      return_value_ = {bind_function(method, instance)};
+    if (ObjFunction* method = find_method(instance->class_, get.name.lexeme)) {
+      return_value_ = bind_function(method, instance);
       return;
     }
 
-    throw RuntimeError{
-        get.name, "Undefined property '" + std::string{get.name.lexeme} + "'."};
+    throw RuntimeError{get.name,
+                       "Undefined property '" + get.name.lexeme + "'."};
   }
 
   throw RuntimeError{get.name, "Only instances have properties."};
@@ -312,7 +333,7 @@ void Interpreter::visit(expr::Set& set) {
     throw RuntimeError{set.name, "Only instances have fields."};
   }
 
-  AS_INSTANCE(object)->fields.insert_or_assign(std::string{set.name.lexeme},
+  AS_INSTANCE(object)->fields.insert_or_assign(set.name.lexeme,
                                                evaluate(set.value));
 }
 
@@ -321,14 +342,13 @@ void Interpreter::visit(expr::This& this_) {
 }
 
 void Interpreter::visit(expr::Super& super) {
-  Function* method = find_method(
-      *AS_CLASS(environment_->get_at(super.depth, {TOKEN_SUPER, "super", 0})),
+  ObjFunction* method = find_method(
+      AS_CLASS(environment_->get_at(super.depth, {TOKEN_SUPER, "super", 0})),
       super.method.lexeme);
 
   if (method == nullptr) {
-    throw RuntimeError{
-        super.method,
-        "Undefined property '" + std::string{super.method.lexeme} + "'."};
+    throw RuntimeError{super.method,
+                       "Undefined property '" + super.method.lexeme + "'."};
   }
 
   const Value& this_ =
@@ -359,7 +379,7 @@ void Interpreter::visit(expr::Variable& variable) {
 }
 
 const Value& Interpreter::look_up_variable(const lox::Token& name,
-                                           const expr::Expr& expr) {
+                                           const expr::Expr& expr) const {
   const int distance = expr.depth;
   if (distance >= 0) {
     return environment_->get_at(distance, name);
@@ -386,56 +406,63 @@ void Interpreter::check_number_operands(const lox::Token& op, const Value& left,
   throw RuntimeError{op, "Operands must be numbers."};
 }
 
-Value* Interpreter::find_field(Instance& instance, std::string_view name) {
-  if (auto it = instance.fields.find(name); it != instance.fields.end()) {
+Value* Interpreter::find_field(ObjInstance* instance, const std::string& name) {
+  if (auto it = instance->fields.find(name); it != instance->fields.end()) {
     return &it->second;
   }
 
   return nullptr;
 }
 
-Function* Interpreter::find_method(Class& class_, std::string_view name) {
-  if (auto it = class_.methods.find(name); it != class_.methods.end()) {
+ObjFunction* Interpreter::find_method(ObjClass* class_,
+                                      const std::string& name) {
+  if (auto it = class_->methods.find(name); it != class_->methods.end()) {
     return &it->second;
   }
 
-  if (class_.superclass != nullptr) {
-    return find_method(*class_.superclass, name);
+  if (class_->superclass != nullptr) {
+    return find_method(class_->superclass, name);
   }
 
   return nullptr;
 }
 
-std::shared_ptr<Function> Interpreter::bind_function(
-    Function* function, const std::shared_ptr<Instance>& instance) {
-  auto* closure = make_environment(function->closure);
+ObjFunction* Interpreter::bind_function(ObjFunction* function,
+                                        ObjInstance* instance) {
+  const StackObject environment{allocate_object<Environment>(function->closure),
+                                this};
+  auto* closure = static_cast<Environment*>(environment);
   closure->define("this", {instance});
-  return std::make_shared<Function>(closure, function->declaration,
-                                    function->arity, function->is_initializer);
+  return allocate_object<ObjFunction>(closure, function->declaration,
+                                      function->arity,
+                                      function->is_initializer);
 }
 
-Value Interpreter::call_class(const std::shared_ptr<Class>& class_,
-                              std::vector<Value> arguments) {
-  auto instance = std::make_shared<Instance>(class_.get());
+Value Interpreter::call_class(ObjClass* class_, std::vector<Value> arguments) {
+  const StackObject instance{allocate_object<ObjInstance>(class_), this};
 
-  if (Function* initializer = find_method(*class_, "init")) {
-    call_function(bind_function(initializer, instance), std::move(arguments));
+  if (ObjFunction* method = find_method(class_, "init")) {
+    const StackObject initializer{
+        bind_function(method, static_cast<ObjInstance*>(instance)), this};
+    call_function(static_cast<ObjFunction*>(initializer), std::move(arguments));
   }
 
-  return instance;
+  return static_cast<ObjInstance*>(instance);
 }
 
-Value Interpreter::call_function(const std::shared_ptr<Function>& function,
+Value Interpreter::call_function(ObjFunction* function,
                                  std::vector<Value> arguments) {
-  auto* environment = make_environment(function->closure);
+  const StackObject environment{allocate_object<Environment>(function->closure),
+                                this};
 
   for (size_t i = 0; i < function->declaration->params.size(); i++) {
-    environment->define(std::string{function->declaration->params[i].lexeme},
-                        arguments[i]);
+    static_cast<Environment*>(environment)
+        ->define(function->declaration->params[i].lexeme, arguments[i]);
   }
 
   // try {
-  execute_block(function->declaration->body, environment);
+  execute_block(function->declaration->body,
+                static_cast<Environment*>(environment));
   // } catch (const Return& return_value) {
   //   return return_value.value_;
   // }
@@ -451,13 +478,17 @@ Value Interpreter::call_function(const std::shared_ptr<Function>& function,
   return return_value_;
 }
 
-Value Interpreter::call_native(const std::shared_ptr<Native>& native,
+Value Interpreter::call_native(ObjNative* native,
                                std::vector<Value> arguments) {
   return native->function(static_cast<int>(arguments.size()), arguments.data());
 }
 
 Value Interpreter::call_value(const Value& callee, std::vector<Value> arguments,
                               const lox::Token& token) {
+  if (!IS_OBJ(callee)) {
+    throw RuntimeError{token, "Can only call functions and classes."};
+  }
+
   auto check_arity = [&](int arity) {
     if (arity != static_cast<int>(arguments.size())) {
       throw RuntimeError{token, "Expected " + std::to_string(arity) +
@@ -466,30 +497,65 @@ Value Interpreter::call_value(const Value& callee, std::vector<Value> arguments,
     }
   };
 
-  if (IS_CLASS(callee)) {
-    check_arity(AS_CLASS(callee)->arity);
-    return call_class(AS_CLASS(callee), arguments);
-  }
-  if (IS_FUNCTION(callee)) {
-    check_arity(AS_FUNCTION(callee)->arity);
-    return call_function(AS_FUNCTION(callee), arguments);
-  }
-  if (IS_NATIVE(callee)) {
-    check_arity(AS_NATIVE(callee)->arity);
-    return call_native(AS_NATIVE(callee), arguments);
-  }
+  const StackObject callable{AS_OBJ(callee), this};
 
-  throw RuntimeError{token, "Can only call functions and classes."};
+  switch (AS_OBJ(callee)->type) {
+    case Obj::Type::CLASS:
+      check_arity(AS_CLASS(callee)->arity);
+      return call_class(AS_CLASS(callee), arguments);
+    case Obj::Type::FUNCTION:
+      check_arity(AS_FUNCTION(callee)->arity);
+      return call_function(AS_FUNCTION(callee), arguments);
+    case Obj::Type::NATIVE:
+      check_arity(AS_NATIVE(callee)->arity);
+      return call_native(AS_NATIVE(callee), arguments);
+    default:
+      throw RuntimeError{token, "Can only call functions and classes."};
+  }
 }
 
-void Interpreter::mark_function_closure(
-    const std::shared_ptr<Function>& function) {
-  mark_environment(function->closure);
+void Interpreter::collect_garbage() {
+#ifdef DEBUG_LOG_GC
+  std::cout << "-- gc begin\n";
+  const size_t before = bytes_allocated_;
+#endif
+
+  mark_roots();
+  trace_references();
+  sweep();
+
+  next_gc_ = bytes_allocated_ * GC_HEAP_GROW_FACTOR;
+
+#ifdef DEBUG_LOG_GC
+  std::cout << "-- gc end\n";
+  std::cout << "   collected " << before - bytes_allocated_ << " bytes (from "
+            << before << " to " << bytes_allocated_ << ") next at " << next_gc_
+            << '\n';
+#endif
 }
 
-void Interpreter::mark_class_closure(const std::shared_ptr<Class>& class_) {
-  if (!class_->methods.empty()) {
-    mark_environment(class_->methods.begin()->second.closure);
+void Interpreter::mark_object(Obj* object) {
+  if (object == nullptr) {
+    return;
+  }
+  if (object->is_marked) {
+    return;
+  }
+
+#ifdef DEBUG_LOG_GC
+  std::cout << static_cast<void*>(object) << " mark ";
+  print_value(Value{object});
+  std::cout << '\n';
+#endif
+
+  object->is_marked = true;
+
+  gray_stack_.push(object);
+}
+
+void Interpreter::mark_value(const Value& value) {
+  if (IS_OBJ(value)) {
+    mark_object(AS_OBJ(value));
   }
 }
 
@@ -497,55 +563,113 @@ void Interpreter::mark_environment(Environment* environment) {
   if (environment == nullptr) {
     return;
   }
-  if (environment->is_marked_) {
+  if (environment->is_marked) {
     return;
   }
 
-  environment->is_marked_ = true;
+  environment->is_marked = true;
 
   for (const auto& [_, value] : environment->get_values()) {
-    if (IS_FUNCTION(value)) {
-      mark_function_closure(AS_FUNCTION(value));
-    } else if (IS_CLASS(value)) {
-      mark_class_closure(AS_CLASS(value));
-    }
+    mark_value(value);
   }
 
   mark_environment(environment->get_enclosing());
 }
 
-Environment* Interpreter::make_environment(Environment* enclosing) {
-  if (environments_created_++ > COLLECT_ENVIRONMENTS_THRESHOLD) {
-    collect_environments(enclosing);
-  }
+void Interpreter::blacken_object(Obj* object) {
+#ifdef DEBUG_LOG_GC
+  std::cout << static_cast<void*>(object) << " blacken ";
+  print_value(Value{object});
+  std::cout << '\n';
+#endif
 
-  auto* environment = new Environment{enclosing};
-  environments_.push_back(environment);
-  return environment;
+  switch (object->type) {
+    case Obj::Type::CLASS: {
+      auto* class_ = static_cast<ObjClass*>(object);
+      if (!class_->methods.empty()) {
+        auto& [_, method] = *class_->methods.begin();
+        mark_environment(method.closure);
+      }
+      break;
+    }
+    case Obj::Type::FUNCTION: {
+      auto* function = static_cast<ObjFunction*>(object);
+      mark_environment(function->closure);
+      break;
+    }
+    case Obj::Type::INSTANCE: {
+      auto* instance = static_cast<ObjInstance*>(object);
+      for (const auto& [_, field] : instance->fields) {
+        mark_value(field);
+      }
+      break;
+    }
+    case Obj::Type::ENVIRONMENT: {
+      auto* environment = static_cast<Environment*>(object);
+      mark_environment(environment);
+    } break;
+    default:
+      break;
+  }
 }
 
-void Interpreter::collect_environments(Environment* enclosing) {
+void Interpreter::mark_roots() {
   mark_environment(globals_);
   mark_environment(environment_);
-  mark_environment(enclosing);
 
-  if (IS_FUNCTION(return_value_)) {
-    mark_function_closure(AS_FUNCTION(return_value_));
-  } else if (IS_CLASS(return_value_)) {
-    mark_class_closure(AS_CLASS(return_value_));
+  mark_value(return_value_);
+
+  for (Obj* object : stack_) {
+    mark_object(object);
   }
+}
 
-  for (Environment* environment : call_stack_) {
-    mark_environment(environment);
+void Interpreter::trace_references() {
+  while (!gray_stack_.empty()) {
+    Obj* object = gray_stack_.top();
+    gray_stack_.pop();
+    blacken_object(object);
   }
+}
 
-  for (auto it = environments_.begin(); it != environments_.end();) {
-    if ((*it)->is_marked_) {
-      (*it)->is_marked_ = false;
-      it++;
+void Interpreter::sweep() {
+  Obj* previous = nullptr;
+  Obj* object = objects_;
+  while (object != nullptr) {
+    if (object->is_marked) {
+      object->is_marked = false;
+      previous = object;
+      object = object->next_object;
     } else {
-      Environment* unreached = *it;
-      environments_.erase(it++);
+      Obj* unreached = object;
+      object = object->next_object;
+      if (previous != nullptr) {
+        previous->next_object = object;
+      } else {
+        objects_ = object;
+      }
+
+      switch (unreached->type) {
+        case Obj::Type::CLASS:
+          bytes_allocated_ -= sizeof(ObjClass);
+          break;
+        case Obj::Type::FUNCTION:
+          bytes_allocated_ -= sizeof(ObjFunction);
+          break;
+        case Obj::Type::INSTANCE:
+          bytes_allocated_ -= sizeof(ObjInstance);
+          break;
+        case Obj::Type::NATIVE:
+          bytes_allocated_ -= sizeof(ObjNative);
+          break;
+        case Obj::Type::ENVIRONMENT:
+          bytes_allocated_ -= sizeof(Environment);
+      }
+
+#ifdef DEBUG_LOG_GC
+      std::cout << static_cast<void*>(unreached) << " free type "
+                << static_cast<int>(unreached->type) << '\n';
+#endif
       delete unreached;
     }
   }

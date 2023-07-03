@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include "scanner.hpp"
 #include "value.hpp"
 
@@ -55,8 +57,8 @@ struct Expr {
 };
 
 struct Assign : Expr {
-  Assign(const lox::Token& name, std::unique_ptr<Expr> value)
-      : name{name}, value{std::move(value)} {}
+  Assign(lox::Token name, std::unique_ptr<Expr> value)
+      : name{std::move(name)}, value{std::move(value)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
@@ -65,9 +67,8 @@ struct Assign : Expr {
 };
 
 struct Binary : Expr {
-  Binary(std::unique_ptr<Expr> left, const lox::Token& op,
-         std::unique_ptr<Expr> right)
-      : left{std::move(left)}, op{op}, right{std::move(right)} {}
+  Binary(std::unique_ptr<Expr> left, lox::Token op, std::unique_ptr<Expr> right)
+      : left{std::move(left)}, op{std::move(op)}, right{std::move(right)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
@@ -77,10 +78,10 @@ struct Binary : Expr {
 };
 
 struct Call : Expr {
-  Call(std::unique_ptr<Expr> callee, const lox::Token& paren,
+  Call(std::unique_ptr<Expr> callee, lox::Token paren,
        std::vector<std::unique_ptr<Expr>> arguments)
       : callee{std::move(callee)},
-        paren{paren},
+        paren{std::move(paren)},
         arguments{std::move(arguments)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
@@ -91,8 +92,8 @@ struct Call : Expr {
 };
 
 struct Get : Expr {
-  Get(std::unique_ptr<Expr> object, const lox::Token& name)
-      : object{std::move(object)}, name{name} {}
+  Get(std::unique_ptr<Expr> object, lox::Token name)
+      : object{std::move(object)}, name{std::move(name)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
@@ -117,9 +118,9 @@ struct Literal : Expr {
 };
 
 struct Logical : Expr {
-  Logical(std::unique_ptr<Expr> left, const lox::Token& op,
+  Logical(std::unique_ptr<Expr> left, lox::Token op,
           std::unique_ptr<Expr> right)
-      : left{std::move(left)}, op{op}, right{std::move(right)} {}
+      : left{std::move(left)}, op{std::move(op)}, right{std::move(right)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
@@ -129,9 +130,11 @@ struct Logical : Expr {
 };
 
 struct Set : Expr {
-  Set(std::unique_ptr<Expr> object, const lox::Token& name,
+  Set(std::unique_ptr<Expr> object, lox::Token name,
       std::unique_ptr<Expr> value)
-      : object{std::move(object)}, name{name}, value{std::move(value)} {}
+      : object{std::move(object)},
+        name{std::move(name)},
+        value{std::move(value)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
@@ -141,7 +144,7 @@ struct Set : Expr {
 };
 
 struct This : Expr {
-  explicit This(const lox::Token& keyword) : keyword{keyword} {}
+  explicit This(lox::Token keyword) : keyword{std::move(keyword)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
@@ -149,8 +152,8 @@ struct This : Expr {
 };
 
 struct Super : Expr {
-  Super(const lox::Token& keyword, const lox::Token& method)
-      : keyword{keyword}, method{method} {}
+  Super(lox::Token keyword, lox::Token method)
+      : keyword{std::move(keyword)}, method{std::move(method)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
@@ -159,8 +162,8 @@ struct Super : Expr {
 };
 
 struct Unary : Expr {
-  Unary(const lox::Token& op, std::unique_ptr<Expr> right)
-      : op{op}, right{std::move(right)} {}
+  Unary(lox::Token op, std::unique_ptr<Expr> right)
+      : op{std::move(op)}, right{std::move(right)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
@@ -169,7 +172,7 @@ struct Unary : Expr {
 };
 
 struct Variable : Expr {
-  explicit Variable(const lox::Token& name) : name{name} {}
+  explicit Variable(lox::Token name) : name{std::move(name)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 

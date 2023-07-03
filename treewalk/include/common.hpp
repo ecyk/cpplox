@@ -4,6 +4,9 @@
 #include <string>
 #include <vector>
 
+// #define DEBUG_STRESS_GC
+// #define DEBUG_LOG_GC
+
 namespace lox::treewalk {
 struct Hash {
   using is_transparent [[maybe_unused]] = void;

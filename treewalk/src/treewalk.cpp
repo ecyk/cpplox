@@ -39,7 +39,7 @@ void run(const std::string& source) {
     return;
   }
 
-  g_interpreter.interpret(statements);
+  g_interpreter.interpret(std::move(statements));
 }
 }  // namespace
 
@@ -50,7 +50,7 @@ int run_file(const std::string& path) {
                            std::istreambuf_iterator<char>{}};
 
   run(source);
-  g_interpreter.free_environments();
+  g_interpreter.free_objects();
 
   if (g_had_error) {
     return 65;
@@ -75,7 +75,7 @@ void run_prompt() {
     run(source_line);
     g_had_error = false;
   }
-  g_interpreter.free_environments();
+  g_interpreter.free_objects();
 }
 
 void runtime_error(const RuntimeError& error) {

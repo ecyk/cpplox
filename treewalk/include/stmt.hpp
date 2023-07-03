@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+#include <utility>
 
 #include "expr.hpp"
 
@@ -57,9 +58,11 @@ struct Block : Stmt {
 };
 
 struct Function : Stmt {
-  Function(const lox::Token& name, std::vector<lox::Token> params,
+  Function(lox::Token name, std::vector<lox::Token> params,
            std::vector<std::unique_ptr<Stmt>> body)
-      : name{name}, params{std::move(params)}, body{std::move(body)} {}
+      : name{std::move(name)},
+        params{std::move(params)},
+        body{std::move(body)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
@@ -69,9 +72,9 @@ struct Function : Stmt {
 };
 
 struct Class : Stmt {
-  Class(const lox::Token& name, std::optional<expr::Variable> superclass,
+  Class(lox::Token name, std::optional<expr::Variable> superclass,
         std::vector<Function> methods)
-      : name{name},
+      : name{std::move(name)},
         superclass{std::move(superclass)},
         methods{std::move(methods)} {}
 
@@ -113,8 +116,8 @@ struct Print : Stmt {
 };
 
 struct Return : Stmt {
-  explicit Return(const lox::Token& keyword, std::unique_ptr<Expr> value)
-      : keyword{keyword}, value{std::move(value)} {}
+  explicit Return(lox::Token keyword, std::unique_ptr<Expr> value)
+      : keyword{std::move(keyword)}, value{std::move(value)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 
@@ -123,8 +126,8 @@ struct Return : Stmt {
 };
 
 struct Var : Stmt {
-  Var(const lox::Token& name, std::unique_ptr<Expr> initializer)
-      : name{name}, initializer{std::move(initializer)} {}
+  Var(lox::Token name, std::unique_ptr<Expr> initializer)
+      : name{std::move(name)}, initializer{std::move(initializer)} {}
 
   void accept(Visitor& visitor) override { visitor.visit(*this); }
 

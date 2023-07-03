@@ -588,8 +588,8 @@ void Compiler::literal(bool /*can_assign*/) {
 }
 
 void Compiler::string(bool /*can_assign*/) {
-  previous.lexeme.remove_prefix(1);
-  previous.lexeme.remove_suffix(1);
+  previous.lexeme.pop_back();
+  previous.lexeme.erase(previous.lexeme.begin());
   emit_constant(OBJ_VAL(g_vm.allocate_object<ObjString>(previous.lexeme)));
 }
 

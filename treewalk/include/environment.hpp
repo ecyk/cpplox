@@ -4,12 +4,11 @@
 #include "value.hpp"
 
 namespace lox::treewalk {
-class Environment {
+class Environment : public Obj {
   using Values = std::unordered_map<std::string, Value, Hash, std::equal_to<>>;
 
  public:
-  Environment() = default;
-  explicit Environment(Environment* enclosing);
+  explicit Environment(Environment* enclosing = nullptr);
 
   const Value& get(const Token& name);
   const Value& get_at(int distance, const Token& name);
@@ -20,8 +19,6 @@ class Environment {
 
   [[nodiscard]] Environment* get_enclosing() const { return enclosing_; }
   [[nodiscard]] Values& get_values() { return values_; }
-
-  bool is_marked_{};
 
  private:
   Environment& ancestor(int distance);

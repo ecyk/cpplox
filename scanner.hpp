@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace lox {
@@ -62,11 +63,11 @@ enum TokenType {
 
 struct Token {
   Token() = default;
-  Token(TokenType type, std::string_view lexeme, int line)
-      : type{type}, lexeme{lexeme}, line{line} {}
+  Token(TokenType type, std::string lexeme, int line)
+      : type{type}, lexeme{std::move(lexeme)}, line{line} {}
 
   TokenType type{TOKEN_ERROR};
-  std::string_view lexeme{};
+  std::string lexeme{};
   int line{};
 };
 
@@ -83,8 +84,8 @@ class Scanner {
     return {type, {start_, static_cast<size_t>(current_ - start_)}, line_};
   }
 
-  [[nodiscard]] Token error_token(std::string_view message) const {
-    return {TOKEN_ERROR, message, line_};
+  [[nodiscard]] Token error_token(std::string message) const {
+    return {TOKEN_ERROR, std::move(message), line_};
   }
 
   Token identifier();
