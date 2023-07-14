@@ -5,7 +5,7 @@
 
 namespace lox::treewalk {
 class Environment : public Obj {
-  using Values = std::unordered_map<std::string, Value, Hash, std::equal_to<>>;
+  using Values = std::unordered_map<std::string, Value>;
 
  public:
   explicit Environment(Environment* enclosing = nullptr);

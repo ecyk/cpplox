@@ -42,6 +42,7 @@ struct Obj {
 
   Obj(const Obj&) = delete;
   Obj& operator=(const Obj&) = delete;
+
   Obj(Obj&&) = delete;
   Obj& operator=(Obj&&) = delete;
 

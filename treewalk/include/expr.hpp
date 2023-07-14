@@ -23,8 +23,10 @@ struct Visitor {
   virtual ~Visitor() = default;
 
   Visitor() = default;
+
   Visitor(const Visitor&) = delete;
   Visitor& operator=(const Visitor&) = delete;
+
   Visitor(Visitor&&) = delete;
   Visitor& operator=(Visitor&&) = delete;
 
@@ -46,8 +48,10 @@ struct Expr {
   virtual ~Expr() = default;
 
   Expr() = default;
+
   Expr(const Expr&) = delete;
   Expr& operator=(const Expr&) = delete;
+
   Expr(Expr&&) = default;
   Expr& operator=(Expr&&) = default;
 

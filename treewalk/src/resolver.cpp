@@ -211,7 +211,7 @@ void Resolver::define(const lox::Token& name) {
 
 void Resolver::resolve_local(expr::Expr& expr, const lox::Token& name) {
   for (size_t i = scopes_.size(); i-- > 0;) {
-    if (scopes_[i].contains(name.lexeme)) {
+    if (scopes_[i].find(name.lexeme) != scopes_[i].end()) {
       expr.depth = static_cast<int>(scopes_.size() - 1 - i);
       return;
     }

@@ -113,11 +113,10 @@ void Interpreter::visit(stmt::Class& class_) {
   }
 
   Methods methods;
-  for (auto& method : class_.methods) {
-    methods.insert_or_assign(method.name.lexeme,
-                             ObjFunction{environment_, &method,
-                                         static_cast<int>(method.params.size()),
-                                         method.name.lexeme == "init"});
+  for (const auto& method : class_.methods) {
+    methods.try_emplace(method.name.lexeme, environment_, &method,
+                        static_cast<int>(method.params.size()),
+                        method.name.lexeme == "init");
   }
 
   auto* object =
@@ -126,7 +125,7 @@ void Interpreter::visit(stmt::Class& class_) {
   if (superclass != nullptr) {
     environment_ = environment_->get_enclosing();
   }
-  
+
   if (ObjFunction* initializer = find_method(object, "init")) {
     object->arity = initializer->arity;
   }
@@ -500,13 +499,13 @@ Value Interpreter::call_value(const Value& callee, std::vector<Value> arguments,
   const StackObject callable{AS_OBJ(callee), this};
 
   switch (AS_OBJ(callee)->type) {
-    case Obj::Type::CLASS:
+    case OBJ_CLASS:
       check_arity(AS_CLASS(callee)->arity);
       return call_class(AS_CLASS(callee), arguments);
-    case Obj::Type::FUNCTION:
+    case OBJ_FUNCTION:
       check_arity(AS_FUNCTION(callee)->arity);
       return call_function(AS_FUNCTION(callee), arguments);
-    case Obj::Type::NATIVE:
+    case OBJ_NATIVE:
       check_arity(AS_NATIVE(callee)->arity);
       return call_native(AS_NATIVE(callee), arguments);
     default:
@@ -584,7 +583,7 @@ void Interpreter::blacken_object(Obj* object) {
 #endif
 
   switch (object->type) {
-    case Obj::Type::CLASS: {
+    case OBJ_CLASS: {
       auto* class_ = static_cast<ObjClass*>(object);
       if (!class_->methods.empty()) {
         auto& [_, method] = *class_->methods.begin();
@@ -592,19 +591,19 @@ void Interpreter::blacken_object(Obj* object) {
       }
       break;
     }
-    case Obj::Type::FUNCTION: {
+    case OBJ_FUNCTION: {
       auto* function = static_cast<ObjFunction*>(object);
       mark_environment(function->closure);
       break;
     }
-    case Obj::Type::INSTANCE: {
+    case OBJ_INSTANCE: {
       auto* instance = static_cast<ObjInstance*>(object);
       for (const auto& [_, field] : instance->fields) {
         mark_value(field);
       }
       break;
     }
-    case Obj::Type::ENVIRONMENT: {
+    case OBJ_ENVIRONMENT: {
       auto* environment = static_cast<Environment*>(object);
       mark_environment(environment);
     } break;
@@ -650,19 +649,19 @@ void Interpreter::sweep() {
       }
 
       switch (unreached->type) {
-        case Obj::Type::CLASS:
+        case OBJ_CLASS:
           bytes_allocated_ -= sizeof(ObjClass);
           break;
-        case Obj::Type::FUNCTION:
+        case OBJ_FUNCTION:
           bytes_allocated_ -= sizeof(ObjFunction);
           break;
-        case Obj::Type::INSTANCE:
+        case OBJ_INSTANCE:
           bytes_allocated_ -= sizeof(ObjInstance);
           break;
-        case Obj::Type::NATIVE:
+        case OBJ_NATIVE:
           bytes_allocated_ -= sizeof(ObjNative);
           break;
-        case Obj::Type::ENVIRONMENT:
+        case OBJ_ENVIRONMENT:
           bytes_allocated_ -= sizeof(Environment);
       }
 

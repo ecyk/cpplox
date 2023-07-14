@@ -4,7 +4,7 @@
 
 namespace lox::treewalk {
 Environment::Environment(Environment* enclosing)
-    : Obj{Type::ENVIRONMENT}, enclosing_{enclosing} {}
+    : Obj{OBJ_ENVIRONMENT}, enclosing_{enclosing} {}
 
 const Value& Environment::get(const Token& name) {
   if (auto it = values_.find(name.lexeme); it != values_.end()) {
